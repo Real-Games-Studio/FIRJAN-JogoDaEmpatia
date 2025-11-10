@@ -1,5 +1,7 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using TMPro;
+using System.Collections;
 
 /// <summary>
 /// Script para gerenciar a tela de resultados do Jogo da Empatia.
@@ -14,6 +16,15 @@ public class ScreenResult : CanvasScreen
     [SerializeField] private TextMeshProUGUI finalMessageText;
     [SerializeField] private TextMeshProUGUI totalScoreText;
     [SerializeField] private TextMeshProUGUI topWordsText;
+
+    [Header("Segmented Bars")]
+    [SerializeField] private SegmentedBar empathyBar;
+    [SerializeField] private SegmentedBar activeListeningBar;
+    [SerializeField] private SegmentedBar selfAwarenessBar;
+
+    [Header("Canvas Groups")]
+    [SerializeField] private CanvasGroup waitingForCardGroup;    // Grupo com "Aproxime seu cartão"
+    [SerializeField] private CanvasGroup postSuccessGroup;       // Grupo que aparece após POST
 
     [Header("Score Display Settings")]
     [SerializeField] private string empathyFormat = "Empatia: {0} pontos";
@@ -31,6 +42,9 @@ public class ScreenResult : CanvasScreen
     /// <param name="finalScore">Pontuação final obtida no jogo (0-12)</param>
     public void ShowFinalResults(int finalScore)
     {
+        // Inicializa os CanvasGroups
+        InitializeCanvasGroups();
+
         // Calcula os pontos de cada habilidade baseado na pontuação final
         SkillScores scores = CalculateSkillScores(finalScore);
 
@@ -48,6 +62,9 @@ public class ScreenResult : CanvasScreen
 
         // Exibe as palavras mais pontuadas
         DisplayTopWords();
+
+        // Inicia a animação das barras segmentadas
+        StartCoroutine(AnimateSkillBars(scores));
 
         // Envia dados para o sistema NFC
         SubmitToNFCSystem(scores);
@@ -142,6 +159,129 @@ public class ScreenResult : CanvasScreen
     }
 
     /// <summary>
+    /// Anima as barras segmentadas com as pontuações das habilidades.
+    /// </summary>
+    /// <param name="scores">Pontuações das habilidades</param>
+    private System.Collections.IEnumerator AnimateSkillBars(SkillScores scores)
+    {
+        // Aguarda um pouco antes de iniciar as animações
+        yield return new WaitForSeconds(0.5f);
+
+        // Anima a barra de Empatia
+        if (empathyBar != null)
+        {
+            yield return StartCoroutine(empathyBar.AnimateBar(scores.empathy));
+        }
+
+        // Anima a barra de Escuta Ativa
+        if (activeListeningBar != null)
+        {
+            yield return StartCoroutine(activeListeningBar.AnimateBar(scores.activeListening));
+        }
+
+        // Anima a barra de Autoconsciência
+        if (selfAwarenessBar != null)
+        {
+            yield return StartCoroutine(selfAwarenessBar.AnimateBar(scores.selfAwareness));
+        }
+
+        Debug.Log("[ScreenResult] Animação das barras segmentadas concluída");
+    }
+
+    /// <summary>
+    /// Inicializa os CanvasGroups para o estado inicial.
+    /// </summary>
+    private void InitializeCanvasGroups()
+    {
+        // Mostra o grupo "aguardando cartão", esconde o grupo "sucesso"
+        if (waitingForCardGroup != null)
+        {
+            waitingForCardGroup.alpha = 1f;
+            waitingForCardGroup.interactable = true;
+            waitingForCardGroup.blocksRaycasts = true;
+        }
+
+        if (postSuccessGroup != null)
+        {
+            postSuccessGroup.alpha = 0f;
+            postSuccessGroup.interactable = false;
+            postSuccessGroup.blocksRaycasts = false;
+        }
+    }
+
+    /// <summary>
+    /// Método público chamado pelo NFCGameService quando o POST é bem-sucedido.
+    /// Faz a transição para o segundo CanvasGroup e aguarda 4 segundos antes de voltar ao menu.
+    /// </summary>
+    public void OnPostSuccess()
+    {
+        Debug.Log("[ScreenResult] === OnPostSuccess CHAMADO ===");
+        Debug.Log("[ScreenResult] Iniciando transição para canvas de sucesso...");
+        StartCoroutine(TransitionToSuccessAndExit());
+    }
+
+    /// <summary>
+    /// Faz a transição suave entre os CanvasGroups e volta ao menu após 4 segundos.
+    /// </summary>
+    private System.Collections.IEnumerator TransitionToSuccessAndExit()
+    {
+        Debug.Log("[ScreenResult] === Coroutine TransitionToSuccessAndExit INICIADA ===");
+
+        float transitionDuration = 1f;
+        float elapsedTime = 0f;
+
+        Debug.Log("[ScreenResult] Iniciando fade out do waitingForCardGroup e fade in do postSuccessGroup...");
+
+        // Transição suave entre os grupos
+        while (elapsedTime < transitionDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / transitionDuration;
+
+            if (waitingForCardGroup != null)
+            {
+                waitingForCardGroup.alpha = Mathf.Lerp(1f, 0f, t);
+            }
+
+            if (postSuccessGroup != null)
+            {
+                postSuccessGroup.alpha = Mathf.Lerp(0f, 1f, t);
+            }
+
+            yield return null;
+        }
+
+        Debug.Log("[ScreenResult] Transição de fade concluída!");
+
+        // Garante que a transição está completa
+        if (waitingForCardGroup != null)
+        {
+            waitingForCardGroup.alpha = 0f;
+            waitingForCardGroup.interactable = false;
+            waitingForCardGroup.blocksRaycasts = false;
+            Debug.Log("[ScreenResult] waitingForCardGroup desativado");
+        }
+
+        if (postSuccessGroup != null)
+        {
+            postSuccessGroup.alpha = 1f;
+            postSuccessGroup.interactable = true;
+            postSuccessGroup.blocksRaycasts = true;
+            Debug.Log("[ScreenResult] postSuccessGroup ativado");
+        }
+
+        Debug.Log("[ScreenResult] ✓ Segundo canvas apareceu completamente. Aguardando 4 segundos...");
+
+        // Aguarda 4 segundos APÓS o segundo canvas aparecer completamente
+        yield return new WaitForSeconds(4f);
+
+        // Volta para a scene 0 (menu principal)
+        Debug.Log("[ScreenResult] Carregando scene 0 (menu principal)...");
+        SceneManager.LoadScene(0);
+        Debug.Log("[ScreenResult] LoadScene(0) chamado!");
+    }
+
+    /// <summary>
     /// Exibe a pontuação total na UI.
     /// </summary>
     /// <param name="finalScore">Pontuação final</param>
@@ -162,7 +302,7 @@ public class ScreenResult : CanvasScreen
         {
             finalMessageText.text = "Candidato, Empatia não resolve todos os problemas, mas ela muda a forma como você os enfrenta. " +
                                    "Cada decisão contribuiu para fortalecer suas habilidades de Empatia, Escuta Ativa e Autoconsciência, " +
-                                   "que foram pontuadas ao longo desta experiência.";
+                                   "que foram pontuadas ao longo desta experiência.<br><br>Aproxime seu cartão.";
         }
     }
 
@@ -293,6 +433,12 @@ public class ScreenResult : CanvasScreen
     {
         SkillScores testScores = new SkillScores(9, 7, 5);
         SubmitToNFCSystem(testScores);
+    }
+
+    [ContextMenu("Test Post Success Transition")]
+    public void TestPostSuccessTransition()
+    {
+        OnPostSuccess();
     }
 
     #endregion

@@ -1,0 +1,44 @@
+{
+    "words": [
+        {
+            "text": "Adaptação",
+            "points": 1,
+            "cumulativePoints": 20
+        },
+        {
+            "text": "Desengajado",
+            "points": 1,
+            "cumulativePoints": 13
+        },
+        {
+            "text": "Resolução de problema",
+            "points": 1,
+            "cumulativePoints": 17
+        },
+        {
+            "text": "Falta de profissionalismo",
+            "points": 1,
+            "cumulativePoints": 11
+        },
+        {
+            "text": "Compromisso",
+            "points": 1,
+            "cumulativePoints": 7
+        },
+        {
+            "text": "Falta de comunicação",
+            "points": 1,
+            "cumulativePoints": 8
+        },
+        {
+            "text": "Respeito ao cliente",
+            "points": 1,
+            "cumulativePoints": 6
+        },
+        {
+            "text": "Negligente",
+            "points": 1,
+            "cumulativePoints": 1
+        }
+    ]
+}

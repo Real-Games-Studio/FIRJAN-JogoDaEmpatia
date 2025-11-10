@@ -146,7 +146,7 @@ public class NFCSetupHelper : MonoBehaviour
     {
         if (NFCGameService.Instance != null)
         {
-            NFCGameService.Instance.ClearNfcData();
+            // NFCGameService.Instance.ClearNfcData();
             Log("Dados NFC limpos.");
         }
     }
@@ -159,7 +159,7 @@ public class NFCSetupHelper : MonoBehaviour
     {
         if (NFCGameService.Instance != null)
         {
-            NFCGameService.Instance.DebugServiceState();
+            // NFCGameService.Instance.DebugServiceState();
         }
     }
 

@@ -3,6 +3,7 @@ using TMPro;
 using System.Collections.Generic;
 using System.Linq;
 using DG.Tweening;
+using FIRJAN.Utilities;
 
 [System.Serializable]
 public class WordDisplaySlot
@@ -30,8 +31,8 @@ public class WordCloudDisplay : MonoBehaviour
     [Header("Animation Settings")]
     public float animationDuration = 0.5f;
 
-    [Header("Color Settings")]
-    public Gradient colorGradient;
+    // [Header("Color Settings")]
+    // public Gradient colorGradient;
 
     [Header("Auto-Population Settings")]
     [Tooltip("Auto-preencher slots no Start()?")]
@@ -41,6 +42,7 @@ public class WordCloudDisplay : MonoBehaviour
     public bool showDebugLogs = true;
 
     private Dictionary<string, int> wordScores = new Dictionary<string, int>();
+    private List<WordData> currentRoundWords = new List<WordData>(); // Dados da rodada atual
     public static WordCloudDisplay Instance { get; private set; }
 
     void Awake()
@@ -64,7 +66,13 @@ public class WordCloudDisplay : MonoBehaviour
             AutoPopulateWordSlots();
         }
 
-        ClearAllSlots();
+        // NÃO limpa os slots aqui - os dados serão carregados pelo ScreenGame
+        // ClearAllSlots(); // REMOVIDO - causava slots vazios
+
+        if (showDebugLogs)
+        {
+            Debug.Log("[WordCloudDisplay] Inicializado. Aguardando dados da rodada.");
+        }
     }
 
     void OnDestroy()
@@ -100,26 +108,41 @@ public class WordCloudDisplay : MonoBehaviour
 
     private void UpdateWordCloudDisplay()
     {
-        var sortedWords = wordScores.OrderByDescending(w => w.Value)
-                                   .ThenBy(w => w.Key)
-                                   .ToList();
-
-        Debug.Log($"[WordCloudDisplay] Updating display with {sortedWords.Count} words");
-
-        for (int i = 0; i < sortedWords.Count && i < wordSlots.Count; i++)
+        if (currentRoundWords.Count == 0)
         {
-            var word = sortedWords[i];
-            var slot = wordSlots[i];
-            UpdateSlot(slot, word.Key, word.Value, sortedWords);
+            Debug.LogWarning("[WordCloudDisplay] Nenhuma palavra carregada na rodada atual");
+            return;
         }
 
-        for (int i = sortedWords.Count; i < wordSlots.Count; i++)
+        Debug.Log($"[WordCloudDisplay] >> Atualizando display com {currentRoundWords.Count} palavras");
+
+        // Atualiza cada slot com a palavra correspondente (sem ordenar!)
+        for (int i = 0; i < currentRoundWords.Count && i < wordSlots.Count; i++)
         {
+            var wordData = currentRoundWords[i];
+            var slot = wordSlots[i];
+
+            Debug.Log($"[WordCloudDisplay] >> Atualizando slot {i}: '{wordData.text}' com {wordData.cumulativePoints} pontos");
+
+            if (slot.textComponent == null)
+            {
+                Debug.LogError($"[WordCloudDisplay] >> ERRO: Slot {i} tem textComponent NULL!");
+            }
+
+            UpdateSlot(slot, wordData.text, wordData.cumulativePoints, currentRoundWords);
+        }
+
+        // Limpa slots extras (não deve acontecer se configurado corretamente)
+        for (int i = currentRoundWords.Count; i < wordSlots.Count; i++)
+        {
+            Debug.Log($"[WordCloudDisplay] >> Limpando slot extra {i}");
             ClearSlot(wordSlots[i]);
         }
+
+        Debug.Log($"[WordCloudDisplay] >> Display atualizado!");
     }
 
-    private void UpdateSlot(WordDisplaySlot slot, string wordText, int points, List<KeyValuePair<string, int>> allWords)
+    private void UpdateSlot(WordDisplaySlot slot, string wordText, int points, List<WordData> allWords)
     {
         if (slot.textComponent == null) return;
 
@@ -139,37 +162,63 @@ public class WordCloudDisplay : MonoBehaviour
         }
     }
 
-    private void AnimateSlotChange(WordDisplaySlot slot, string newWord, int newPoints, List<KeyValuePair<string, int>> allWords)
+    private void AnimateSlotChange(WordDisplaySlot slot, string newWord, int newPoints, List<WordData> allWords)
     {
         if (slot.textComponent == null) return;
 
-        Debug.Log($"[WordCloudDisplay] Animating change in '{slot.positionName}': '{slot.currentWord}' -> '{newWord}'");
+        if (showDebugLogs)
+        {
+            Debug.Log($"[WordCloudDisplay] Animando mudança em '{slot.positionName}': '{slot.currentWord}' -> '{newWord}'");
+        }
 
         slot.textComponent.DOFade(0f, animationDuration * 0.3f)
             .OnComplete(() =>
             {
                 SetSlotImmediate(slot, newWord, newPoints, allWords);
                 slot.textComponent.DOFade(1f, animationDuration * 0.7f);
-                // Removido DOPunchScale para manter escala sempre em (1,1,1)
             });
     }
 
-    private void SetSlotImmediate(WordDisplaySlot slot, string wordText, int points, List<KeyValuePair<string, int>> allWords)
+    private void SetSlotImmediate(WordDisplaySlot slot, string wordText, int points, List<WordData> allWords)
     {
         if (slot.textComponent == null) return;
 
         slot.currentWord = wordText;
         slot.currentPoints = points;
-        slot.textComponent.text = wordText;
+
+        // Tenta usar LocalizedText se disponível
+        LocalizedText localizedText = slot.textComponent.GetComponent<LocalizedText>();
+        if (localizedText != null)
+        {
+            // Determina qual palavra é baseado no índice do slot
+            int wordIndex = wordSlots.IndexOf(slot);
+            if (wordIndex >= 0 && wordIndex < 8)
+            {
+                string key = $"palavra{wordIndex + 1}";
+                localizedText.SetLocalizationKey("situation_results", key);
+            }
+            else
+            {
+                // Fallback se não encontrar o índice
+                slot.textComponent.text = wordText;
+            }
+        }
+        else
+        {
+            // Fallback se não tiver LocalizedText
+            slot.textComponent.text = wordText;
+        }
+
         ApplyWordStyle(slot, points, allWords);
     }
 
-    private void ApplyWordStyle(WordDisplaySlot slot, int points, List<KeyValuePair<string, int>> allWords)
+    private void ApplyWordStyle(WordDisplaySlot slot, int points, List<WordData> allWords)
     {
         if (slot.textComponent == null || allWords.Count == 0) return;
 
-        int minPoints = allWords.Min(w => w.Value);
-        int maxPoints = allWords.Max(w => w.Value);
+        // Usa cumulativePoints para calcular o tamanho
+        int minPoints = allWords.Min(w => w.cumulativePoints);
+        int maxPoints = allWords.Max(w => w.cumulativePoints);
 
         float normalizedScore;
         if (maxPoints > minPoints)
@@ -178,21 +227,26 @@ public class WordCloudDisplay : MonoBehaviour
         }
         else
         {
+            // Se todas as palavras têm a mesma pontuação, usa tamanho médio
             normalizedScore = 0.5f;
         }
 
-        normalizedScore = Mathf.Max(normalizedScore, 0.2f);
+        // Remove o clamp mínimo para permitir palavras muito pequenas
+        normalizedScore = Mathf.Clamp01(normalizedScore);
 
         float fontSize = Mathf.Lerp(minFontSize, maxFontSize, normalizedScore);
         slot.textComponent.fontSize = fontSize;
 
-        if (colorGradient != null && colorGradient.colorKeys.Length > 0)
-        {
-            Color color = colorGradient.Evaluate(normalizedScore);
-            slot.textComponent.color = color;
-        }
+        // if (colorGradient != null && colorGradient.colorKeys.Length > 0)
+        // {
+        //     Color color = colorGradient.Evaluate(normalizedScore);
+        //     slot.textComponent.color = color;
+        // }
 
-        Debug.Log($"[WordCloudDisplay] '{slot.currentWord}' -> {points} pts, normalized: {normalizedScore:F2}, fontSize: {fontSize:F1}");
+        if (showDebugLogs)
+        {
+            Debug.Log($"[WordCloudDisplay] '{slot.currentWord}' -> {points} pts (min: {minPoints}, max: {maxPoints}), normalized: {normalizedScore:F2}, fontSize: {fontSize:F1}");
+        }
     }
 
     private void ClearSlot(WordDisplaySlot slot)
@@ -352,6 +406,87 @@ public class WordCloudDisplay : MonoBehaviour
     }
 
     #region Public Utility Methods
+
+    /// <summary>
+    /// Carrega os dados de uma rodada e inicializa a nuvem de palavras.
+    /// IMPORTANTE: Deve ser chamado no início de cada rodada.
+    /// </summary>
+    /// <param name="roundWords">Lista de WordData da rodada</param>
+    public void LoadRoundData(List<WordData> roundWords)
+    {
+        if (roundWords == null || roundWords.Count == 0)
+        {
+            Debug.LogError("[WordCloudDisplay] Tentativa de carregar rodada com lista vazia ou nula");
+            return;
+        }
+
+        currentRoundWords = new List<WordData>(roundWords);
+
+        // Limpa o sistema antigo de wordScores
+        wordScores.Clear();
+
+        Debug.Log($"[WordCloudDisplay] ===== CARREGANDO RODADA =====");
+        Debug.Log($"[WordCloudDisplay] Total de palavras: {currentRoundWords.Count}");
+        Debug.Log($"[WordCloudDisplay] Total de slots disponíveis: {wordSlots.Count}");
+
+        foreach (var word in currentRoundWords)
+        {
+            Debug.Log($"  - '{word.text}': cumulativePoints={word.cumulativePoints}");
+        }
+
+        // Verifica se há slots suficientes
+        if (wordSlots.Count < currentRoundWords.Count)
+        {
+            Debug.LogError($"[WordCloudDisplay] ERRO: Apenas {wordSlots.Count} slots disponíveis para {currentRoundWords.Count} palavras!");
+        }
+
+        // Verifica se os slots têm textComponent
+        int slotsWithComponent = 0;
+        for (int i = 0; i < wordSlots.Count; i++)
+        {
+            if (wordSlots[i].textComponent != null)
+                slotsWithComponent++;
+            else
+                Debug.LogError($"[WordCloudDisplay] ERRO: Slot {i} ('{wordSlots[i].positionName}') não tem TextMeshProUGUI!");
+        }
+        Debug.Log($"[WordCloudDisplay] Slots com TextMeshProUGUI válido: {slotsWithComponent}/{wordSlots.Count}");
+
+        // Atualiza a visualização imediatamente
+        UpdateWordCloudDisplay();
+
+        Debug.Log($"[WordCloudDisplay] ===== FIM DO CARREGAMENTO =====");
+    }
+
+    /// <summary>
+    /// Atualiza a pontuação de uma palavra específica na rodada atual.
+    /// </summary>
+    /// <param name="wordText">Texto da palavra</param>
+    /// <param name="newCumulativePoints">Nova pontuação cumulativa</param>
+    public void UpdateWordCumulativePoints(string wordText, int newCumulativePoints)
+    {
+        WordData word = currentRoundWords.Find(w => w.text == wordText);
+        if (word != null)
+        {
+            word.cumulativePoints = newCumulativePoints;
+
+            if (showDebugLogs)
+            {
+                Debug.Log($"[WordCloudDisplay] Palavra '{wordText}' atualizada para {newCumulativePoints} pontos cumulativos");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[WordCloudDisplay] Palavra '{wordText}' não encontrada na rodada atual");
+        }
+    }
+
+    /// <summary>
+    /// Retorna os dados atuais da rodada.
+    /// </summary>
+    public List<WordData> GetCurrentRoundWords()
+    {
+        return new List<WordData>(currentRoundWords);
+    }
 
     /// <summary>
     /// Obtém as palavras mais pontuadas em ordem decrescente.

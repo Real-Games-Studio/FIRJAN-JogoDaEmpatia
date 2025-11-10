@@ -1,0 +1,44 @@
+{
+    "words": [
+        {
+            "text": "Improdutividade",
+            "points": 1,
+            "cumulativePoints": 5
+        },
+        {
+            "text": "Distração",
+            "points": 1,
+            "cumulativePoints": 4
+        },
+        {
+            "text": "Resolução de problemas",
+            "points": 1,
+            "cumulativePoints": 12
+        },
+        {
+            "text": "Colaboração",
+            "points": 1,
+            "cumulativePoints": 11
+        },
+        {
+            "text": "Desorganização",
+            "points": 1,
+            "cumulativePoints": 7
+        },
+        {
+            "text": "Descomprometimento",
+            "points": 1,
+            "cumulativePoints": 5
+        },
+        {
+            "text": "Estratégia",
+            "points": 1,
+            "cumulativePoints": 8
+        },
+        {
+            "text": "Parceria",
+            "points": 1,
+            "cumulativePoints": 8
+        }
+    ]
+}

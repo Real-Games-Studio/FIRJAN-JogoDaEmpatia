@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using FIRJAN.Utilities;
+using FIRJAN.UI;
 
 /// <summary>
 /// Script para gerenciar a lógica principal do Jogo da Empatia.
@@ -74,12 +76,17 @@ public class ScreenGame : CanvasScreen
     public Sprite round3Image2;
 
     [Header("UI References")]
+    [SerializeField] private TextMeshProUGUI headerText;
+    [SerializeField] private Image singleImageDisplay;
+    [SerializeField] private CanvasGroup singleImageCanvasGroup;
     [SerializeField] private Image imageDisplay1;
     [SerializeField] private CanvasGroup imageDisplay1CanvasGroup;
     [SerializeField] private Image imageDisplay2;
     [SerializeField] private CanvasGroup imageDisplay2CanvasGroup;
     [SerializeField] private TextMeshProUGUI descriptionText;
     [SerializeField] private Transform wordsContainer;
+    [SerializeField] private WordButtonAnimator wordButtonAnimator; // Componente para animar os botões
+    [SerializeField] private CanvasFadeIn wordsContainerFadeIn; // Componente para fazer fade in do container de palavras
     [SerializeField] private Button wordButtonPrefab;
     [SerializeField] private Button confirmButton;
     [SerializeField] private TextMeshProUGUI feedbackText;
@@ -96,13 +103,18 @@ public class ScreenGame : CanvasScreen
     [SerializeField] private float fadeDuration = 1f;
     [SerializeField] private string questionDescription = "Qual sua opinião sobre isso?";
 
-    [Header("Situações das Rodadas")]
-    [TextArea(3, 5)]
-    [SerializeField] private string situation1Description = "Em uma reunião online importante com um cliente, Marcos não liga a câmera.";
-    [TextArea(3, 5)]
-    [SerializeField] private string situation2Description = "Funcionário chega atrasado e de moletom numa reunião super importante com clientes.";
-    [TextArea(3, 5)]
-    [SerializeField] private string situation3Description = "Funcionária toma café com outro colaborador enquanto o resto da equipe trabalha sem parar.";
+    // [Header("Situações das Rodadas")] // DEPRECATED: Agora usa LocalizedText
+    // [TextArea(3, 5)]
+    // [SerializeField] private string situation1Description = "Em uma reunião online importante com um cliente, Marcos não liga a câmera.";
+    // [TextArea(3, 5)]
+    // [SerializeField] private string situation2Description = "Funcionário chega atrasado e de moletom numa reunião super importante com clientes.";
+    // [TextArea(3, 5)]
+    // [SerializeField] private string situation3Description = "Funcionária toma café com outro colaborador enquanto o resto da equipe trabalha sem parar.";
+
+    [Header("Localized Text")]
+    [SerializeField] private LocalizedText localizedTextHeader;
+    [SerializeField] private LocalizedText descriptionLocalizedText;
+    [SerializeField] private LocalizedText confirmButtonLocalizedText;
 
     #endregion
 
@@ -113,6 +125,7 @@ public class ScreenGame : CanvasScreen
     private List<Button> currentWordButtons = new List<Button>();
     private List<bool> selectedWords = new List<bool>();
     private bool isAwaitingSummaryContinue = false;
+    private List<WordData> currentRoundWordData = new List<WordData>(); // Dados da rodada atual
 
     #endregion
 
@@ -151,6 +164,8 @@ public class ScreenGame : CanvasScreen
             feedbackText.text = "";
         if (descriptionText != null)
             descriptionText.text = "";
+        if (headerText != null)
+            headerText.text = "";
 
         if (wordCloudSummaryCanvasGroup != null)
         {
@@ -167,7 +182,15 @@ public class ScreenGame : CanvasScreen
             inRoundCanvasGroup.blocksRaycasts = true;
         }
 
-        // Reseta os dois displays de imagem
+        // Reseta os displays de imagem
+        if (singleImageDisplay != null)
+        {
+            singleImageDisplay.sprite = null;
+            singleImageDisplay.gameObject.SetActive(false);
+        }
+        if (singleImageCanvasGroup != null)
+            singleImageCanvasGroup.alpha = 0f;
+
         if (imageDisplay1 != null)
         {
             imageDisplay1.sprite = null;
@@ -184,7 +207,7 @@ public class ScreenGame : CanvasScreen
         if (imageDisplay2CanvasGroup != null)
             imageDisplay2CanvasGroup.alpha = 0f;
 
-        UpdateConfirmButtonLabel(confirmButtonDefaultLabel);
+        UpdateConfirmButtonLabel(true); // true = "Confirmar"
 
         // Inicia a primeira rodada
         StartRound(currentRoundIndex);
@@ -205,6 +228,9 @@ public class ScreenGame : CanvasScreen
         RoundData currentRound = gameRounds[roundIndex];
         isAwaitingSummaryContinue = false;
 
+        // Carrega os dados salvos da rodada ou cria dados padrão
+        LoadRoundWordData(roundIndex, currentRound);
+
         // Esconde as palavras e botão de confirmar inicialmente
         if (wordsContainer != null)
             wordsContainer.gameObject.SetActive(false);
@@ -224,28 +250,34 @@ public class ScreenGame : CanvasScreen
 
     /// <summary>
     /// Corrotina para gerenciar a sequência de imagens de uma rodada.
-    /// Mostra imagem 1 com fade in e botões de sentimentos, depois segunda imagem com nuvem após confirmar.
+    /// Mostra primeira imagem sozinha, depois as duas imagens lado a lado após confirmar.
     /// </summary>
     private IEnumerator RoundImageSequence(int roundIndex, RoundData roundData)
     {
         Sprite image1 = GetImage1ForRound(roundIndex);
 
-        // Fase 1: Mostra primeira imagem com fade in e descrição inicial
-        if (imageDisplay1 != null && image1 != null)
+        // Fase 1: Mostra primeira imagem sozinha no componente separado
+        if (singleImageDisplay != null && image1 != null)
         {
-            imageDisplay1.sprite = image1;
-            imageDisplay1.gameObject.SetActive(true);
+            singleImageDisplay.sprite = image1;
+            singleImageDisplay.gameObject.SetActive(true);
         }
 
-        if (descriptionText != null)
+        // Atualiza o header com o número da situação
+        if (headerText != null)
         {
-            descriptionText.text = GetSituationDescription(roundIndex);
+            var roundNumber = roundIndex + 1;
+            headerText.text = $"Situação {roundNumber}";
+            localizedTextHeader.SetFormatVariables(roundNumber.ToString());
         }
+
+        // Atualiza a descrição da situação usando LocalizedText
+        UpdateSituationDescription(roundIndex);
 
         // Fade in da primeira imagem
-        if (imageDisplay1CanvasGroup != null)
+        if (singleImageCanvasGroup != null)
         {
-            yield return StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
+            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 0f, 1f, fadeDuration));
         }
 
         // Cria os botões de palavras e mostra opções imediatamente após a primeira imagem
@@ -253,11 +285,24 @@ public class ScreenGame : CanvasScreen
 
         if (wordsContainer != null)
             wordsContainer.gameObject.SetActive(true);
+
+        // Aguarda a tela estar ligada antes de fazer o fade in
+        while (!IsOn())
+        {
+            yield return null;
+        }
+
+        // Faz o fade in do container de palavras
+        if (wordsContainerFadeIn != null)
+        {
+            wordsContainerFadeIn.DoFadeIn();
+        }
+
         if (confirmButton != null)
         {
             confirmButton.gameObject.SetActive(true);
             confirmButton.interactable = true;
-            UpdateConfirmButtonLabel(confirmButtonDefaultLabel);
+            UpdateConfirmButtonLabel(true); // true = "Confirmar"
             Debug.Log("Botão de confirmar ativado e interativo");
         }
     }
@@ -296,16 +341,34 @@ public class ScreenGame : CanvasScreen
         // Inicializa as listas
         selectedWords.Clear();
 
-        foreach (WordChoice word in words)
+        // Determina qual section usar baseado na rodada atual
+        string section = $"situation{currentRoundIndex + 1}";
+
+        for (int i = 0; i < words.Count; i++)
         {
+            WordChoice word = words[i];
+
             if (wordButtonPrefab != null && wordsContainer != null)
             {
                 Button wordButton = Instantiate(wordButtonPrefab, wordsContainer);
-                TextMeshProUGUI buttonText = wordButton.GetComponentInChildren<TextMeshProUGUI>();
 
-                if (buttonText != null)
+                // Tenta configurar o LocalizedText se existir no prefab
+                LocalizedText localizedText = wordButton.GetComponentInChildren<LocalizedText>();
+                if (localizedText != null)
                 {
-                    buttonText.text = word.wordText;
+                    // Define a key como opcao1, opcao2, etc.
+                    string key = $"opcao{i + 1}";
+                    localizedText.SetLocalizationKey(section, key);
+                }
+                else
+                {
+                    // Fallback: usa o texto diretamente se não tiver LocalizedText
+                    TextMeshProUGUI buttonText = wordButton.GetComponentInChildren<TextMeshProUGUI>();
+                    if (buttonText != null)
+                    {
+                        buttonText.text = word.wordText;
+                    }
+                    Debug.LogWarning($"LocalizedText não encontrado no wordButtonPrefab. Usando texto hardcoded.");
                 }
 
                 // Configura o toggle behavior
@@ -316,6 +379,30 @@ public class ScreenGame : CanvasScreen
 
                 currentWordButtons.Add(wordButton);
             }
+        }
+
+        // Animar os botões aparecendo de cima para baixo (com delay para aguardar fade-in da tela)
+        if (wordButtonAnimator != null)
+        {
+            StartCoroutine(AnimateButtonsAfterDelay());
+        }
+    }
+
+    /// <summary>
+    /// Anima os botões após um delay para aguardar o fade-in da tela.
+    /// </summary>
+    private IEnumerator AnimateButtonsAfterDelay()
+    {
+        // Aguarda a tela estar ligada antes de animar
+        while (!IsOn())
+        {
+            yield return null;
+        }
+
+        yield return new WaitForSeconds(0.5f); // Aguarda o fade-in da tela
+        if (wordButtonAnimator != null)
+        {
+            wordButtonAnimator.AnimateButtons();
         }
     }
 
@@ -395,17 +482,14 @@ public class ScreenGame : CanvasScreen
 
         Debug.Log($"Palavras selecionadas: {selectedWords.Count}, Palavras da rodada: {currentRound.words.Count}");
 
-        // Conta as palavras empáticas selecionadas e registra na nuvem de palavras
-        for (int i = 0; i < selectedWords.Count && i < currentRound.words.Count; i++)
+        // Atualiza os dados das palavras selecionadas
+        for (int i = 0; i < selectedWords.Count && i < currentRound.words.Count && i < currentRoundWordData.Count; i++)
         {
             if (selectedWords[i])
             {
-                // Adiciona a palavra selecionada à nuvem de palavras
-                if (WordCloudDisplay.Instance != null)
-                {
-                    WordCloudDisplay.Instance.AddWordPoints(currentRound.words[i].wordText, 1);
-                    Debug.Log($"Palavra '{currentRound.words[i].wordText}' adicionada à nuvem de palavras");
-                }
+                // Incrementa a pontuação cumulativa da palavra
+                currentRoundWordData[i].cumulativePoints += 1;
+                Debug.Log($"Palavra '{currentRound.words[i].wordText}' incrementada para {currentRoundWordData[i].cumulativePoints} pontos cumulativos");
 
                 // Verifica se é empática para pontuação
                 if (currentRound.words[i].isEmpathetic)
@@ -414,6 +498,15 @@ public class ScreenGame : CanvasScreen
                     Debug.Log($"Palavra empática selecionada: {currentRound.words[i].wordText}");
                 }
             }
+        }
+
+        // Salva os dados atualizados
+        SaveRoundWordData(currentRoundIndex);
+
+        // Atualiza a nuvem de palavras com os novos dados
+        if (WordCloudDisplay.Instance != null)
+        {
+            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData);
         }
 
         // Adiciona ao score total
@@ -425,29 +518,44 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Corrotina para mostrar a segunda imagem e a nuvem de palavras.
+    /// Corrotina para mostrar as duas imagens lado a lado e a nuvem de palavras.
     /// </summary>
     private IEnumerator ShowSecondImageAndWordCloud()
     {
+        Sprite image1 = GetImage1ForRound(currentRoundIndex);
         Sprite image2 = GetImage2ForRound(currentRoundIndex);
 
-        // Prepara segunda imagem
+        // Esconde a imagem única
+        if (singleImageCanvasGroup != null)
+        {
+            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+            singleImageDisplay.gameObject.SetActive(false);
+        }
+
+        // Prepara as duas imagens lado a lado
+        if (imageDisplay1 != null && image1 != null)
+        {
+            imageDisplay1.sprite = image1;
+            imageDisplay1.gameObject.SetActive(true);
+        }
+
         if (imageDisplay2 != null && image2 != null)
         {
             imageDisplay2.sprite = image2;
             imageDisplay2.gameObject.SetActive(true);
         }
 
-        // Fade in da segunda imagem
-        if (imageDisplay2CanvasGroup != null)
+        // Fade in das duas imagens simultaneamente
+        if (imageDisplay1CanvasGroup != null && imageDisplay2CanvasGroup != null)
         {
+            StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
             yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 0f, 1f, fadeDuration));
         }
 
-        // Muda a descrição após a segunda imagem aparecer
-        if (descriptionText != null)
+        // Muda a descrição para o texto de resultados após as imagens aparecerem
+        if (descriptionLocalizedText != null)
         {
-            descriptionText.text = questionDescription;
+            descriptionLocalizedText.SetLocalizationKey("situation_results", "texto1");
         }
 
         // Exibe mensagem de feedback da Aya
@@ -459,15 +567,20 @@ public class ScreenGame : CanvasScreen
 
     /// <summary>
     /// Exibe a mensagem de feedback da Aya.
+    /// DEPRECATED: O texto agora é mostrado via descriptionLocalizedText usando situation_results.texto1
     /// </summary>
     private void ShowAyaFeedback()
     {
+        // O feedback agora é mostrado via descriptionLocalizedText (situation_results.texto1)
+        // Mantido por compatibilidade, mas não faz nada
+        /*
         if (feedbackText != null)
         {
             feedbackText.text = "As palavras maiores foram as mais escolhidas por você e por outros participantes, " +
                                "revelando pontos de empatia compartilhados em comum. Já as palavras menores representam " +
                                "escolhas menos frequentes, mas igualmente importantes, pois mostram sua visão única da situação.";
         }
+        */
     }
 
     /// <summary>
@@ -519,10 +632,112 @@ public class ScreenGame : CanvasScreen
     #region Helper Methods
 
     /// <summary>
+    /// Carrega os dados de pontuação da rodada do JSON ou cria dados padrão.
+    /// </summary>
+    /// <param name="roundIndex">Índice da rodada (0-2)</param>
+    /// <param name="roundData">Dados da rodada com as palavras</param>
+    private void LoadRoundWordData(int roundIndex, RoundData roundData)
+    {
+        if (WordScorePersistence.Instance == null)
+        {
+            Debug.LogWarning("[ScreenGame] WordScorePersistence.Instance é nulo. Criando dados padrão.");
+            currentRoundWordData = CreateDefaultWordData(roundData);
+
+            // IMPORTANTE: Mesmo sem persistência, carrega os dados na nuvem
+            if (WordCloudDisplay.Instance != null)
+            {
+                WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData);
+                Debug.Log($"[ScreenGame] Dados padrão carregados na nuvem: {currentRoundWordData.Count} palavras");
+            }
+            return;
+        }
+
+        // Cria lista com os textos das palavras
+        List<string> wordTexts = new List<string>();
+        foreach (var word in roundData.words)
+        {
+            wordTexts.Add(word.wordText);
+        }
+
+        // Carrega dados salvos ou cria dados padrão
+        currentRoundWordData = WordScorePersistence.Instance.LoadRoundData(roundIndex, wordTexts);
+
+        // Garante que os textos estejam corretos (caso o JSON esteja desatualizado)
+        for (int i = 0; i < currentRoundWordData.Count && i < roundData.words.Count; i++)
+        {
+            if (currentRoundWordData[i].text != roundData.words[i].wordText)
+            {
+                currentRoundWordData[i].text = roundData.words[i].wordText;
+            }
+        }
+
+        // Carrega os dados na nuvem de palavras
+        if (WordCloudDisplay.Instance != null)
+        {
+            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData);
+            Debug.Log($"[ScreenGame] Dados da rodada {roundIndex + 1} carregados na nuvem: {currentRoundWordData.Count} palavras");
+        }
+        else
+        {
+            Debug.LogError("[ScreenGame] WordCloudDisplay.Instance é nulo! Não foi possível carregar dados na nuvem.");
+        }
+    }
+
+    /// <summary>
+    /// Cria dados padrão para uma rodada.
+    /// </summary>
+    /// <param name="roundData">Dados da rodada</param>
+    /// <returns>Lista de WordData inicializados</returns>
+    private List<WordData> CreateDefaultWordData(RoundData roundData)
+    {
+        List<WordData> wordDataList = new List<WordData>();
+
+        foreach (var word in roundData.words)
+        {
+            wordDataList.Add(new WordData(word.wordText, 1, 1));
+        }
+
+        return wordDataList;
+    }
+
+    /// <summary>
+    /// Salva os dados de pontuação da rodada no JSON.
+    /// </summary>
+    /// <param name="roundIndex">Índice da rodada (0-2)</param>
+    private void SaveRoundWordData(int roundIndex)
+    {
+        if (WordScorePersistence.Instance == null)
+        {
+            Debug.LogWarning("[ScreenGame] WordScorePersistence.Instance é nulo. Não foi possível salvar.");
+            return;
+        }
+
+        bool success = WordScorePersistence.Instance.SaveRoundData(roundIndex, currentRoundWordData);
+
+        if (success)
+        {
+            Debug.Log($"[ScreenGame] Dados da rodada {roundIndex + 1} salvos com sucesso");
+        }
+        else
+        {
+            Debug.LogError($"[ScreenGame] Falha ao salvar dados da rodada {roundIndex + 1}");
+        }
+    }
+
+    /// <summary>
     /// Reseta as imagens para iniciar uma nova rodada.
     /// </summary>
     private void ResetImagesForNewRound()
     {
+        // Reseta a imagem única
+        if (singleImageDisplay != null)
+        {
+            singleImageDisplay.sprite = null;
+            singleImageDisplay.gameObject.SetActive(false);
+        }
+        if (singleImageCanvasGroup != null)
+            singleImageCanvasGroup.alpha = 0f;
+
         // Reseta a primeira imagem
         if (imageDisplay1 != null)
         {
@@ -547,20 +762,46 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Atualiza o texto do botão de confirmação quando disponível.
+    /// Atualiza o texto do botão de confirmação usando LocalizedText.
     /// </summary>
-    private void UpdateConfirmButtonLabel(string label)
+    /// <param name="useConfirm">True para "Confirmar" (botao1), False para "Continuar" (botao2)</param>
+    private void UpdateConfirmButtonLabel(bool useConfirm = true)
     {
-        if (confirmButtonText != null)
+        string targetText = useConfirm ? "CONFIRMAR" : "CONTINUAR";
+        Debug.Log($"[UpdateConfirmButtonLabel] Tentando mudar para: {targetText}");
+
+        if (confirmButtonLocalizedText != null)
         {
-            confirmButtonText.text = label;
+            string key = useConfirm ? "botao1" : "botao2";
+            Debug.Log($"[UpdateConfirmButtonLabel] Usando LocalizedText com key: situation_results.{key}");
+            confirmButtonLocalizedText.SetLocalizationKey("situation_results", key);
         }
-        else if (confirmButton != null)
+        else
         {
-            TextMeshProUGUI labelTMP = confirmButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (labelTMP != null)
+            Debug.LogWarning("[UpdateConfirmButtonLabel] confirmButtonLocalizedText é NULL! Usando fallback.");
+            // Fallback para o método antigo se não tiver LocalizedText
+            string label = useConfirm ? confirmButtonDefaultLabel : confirmButtonContinueLabel;
+            if (confirmButtonText != null)
             {
-                labelTMP.text = label;
+                confirmButtonText.text = label;
+                Debug.Log($"[UpdateConfirmButtonLabel] Texto atualizado via confirmButtonText: {label}");
+            }
+            else if (confirmButton != null)
+            {
+                TextMeshProUGUI labelTMP = confirmButton.GetComponentInChildren<TextMeshProUGUI>();
+                if (labelTMP != null)
+                {
+                    labelTMP.text = label;
+                    Debug.Log($"[UpdateConfirmButtonLabel] Texto atualizado via GetComponentInChildren: {label}");
+                }
+                else
+                {
+                    Debug.LogError("[UpdateConfirmButtonLabel] Não encontrou TextMeshProUGUI no botão!");
+                }
+            }
+            else
+            {
+                Debug.LogError("[UpdateConfirmButtonLabel] confirmButton é NULL!");
             }
         }
     }
@@ -603,7 +844,7 @@ public class ScreenGame : CanvasScreen
         if (confirmButton != null)
         {
             confirmButton.interactable = true;
-            UpdateConfirmButtonLabel(confirmButtonContinueLabel);
+            UpdateConfirmButtonLabel(false); // false = "Continuar"
         }
     }
 
@@ -625,7 +866,7 @@ public class ScreenGame : CanvasScreen
         if (confirmButton != null)
         {
             confirmButton.interactable = false;
-            UpdateConfirmButtonLabel(confirmButtonDefaultLabel);
+            UpdateConfirmButtonLabel(true); // true = "Confirmar"
         }
 
         // Retorna ao fluxo normal
@@ -633,20 +874,31 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Retorna a descrição da situação para a rodada especificada.
+    /// Atualiza a descrição da situação usando LocalizedText para a rodada especificada.
     /// </summary>
     /// <param name="roundIndex">Índice da rodada (0-2)</param>
-    /// <returns>Texto da situação da rodada</returns>
-    private string GetSituationDescription(int roundIndex)
+    private void UpdateSituationDescription(int roundIndex)
     {
+        if (descriptionLocalizedText == null)
+        {
+            Debug.LogWarning("descriptionLocalizedText não está atribuído!");
+            return;
+        }
+
         switch (roundIndex)
         {
-            case 0: return situation1Description;
-            case 1: return situation2Description;
-            case 2: return situation3Description;
+            case 0:
+                descriptionLocalizedText.SetLocalizationKey("situation1", "descricao1");
+                break;
+            case 1:
+                descriptionLocalizedText.SetLocalizationKey("situation2", "descricao1");
+                break;
+            case 2:
+                descriptionLocalizedText.SetLocalizationKey("situation3", "descricao1");
+                break;
             default:
                 Debug.LogError($"Índice de rodada inválido: {roundIndex}");
-                return "Situação não encontrada.";
+                break;
         }
     }
 

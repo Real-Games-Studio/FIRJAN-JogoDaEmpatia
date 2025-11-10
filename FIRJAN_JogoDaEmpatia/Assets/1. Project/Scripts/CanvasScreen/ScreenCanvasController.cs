@@ -5,6 +5,7 @@ using UnityEditor;
 using TMPro;
 using UnityEngine.UI;
 using RealGames;
+using UnityEngine.SceneManagement;
 public class ScreenCanvasController : MonoBehaviour
 {
     public static ScreenCanvasController instance;
@@ -74,6 +75,7 @@ public class ScreenCanvasController : MonoBehaviour
         float totalTime = appConfig != null ? appConfig.maxInactiveTime : 0f;
         UpdateTimerUI(totalTime);
         ScreenManager.CallScreen(inicialScreen);
+        SceneManager.LoadScene(0);
     }
     public void OnScreenCall(string name)
     {
