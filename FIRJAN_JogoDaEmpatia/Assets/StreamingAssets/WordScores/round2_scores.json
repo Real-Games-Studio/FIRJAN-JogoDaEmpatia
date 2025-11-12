@@ -3,17 +3,17 @@
         {
             "text": "Desleixo",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 2
         },
         {
             "text": "Adaptação",
             "points": 1,
-            "cumulativePoints": 2
+            "cumulativePoints": 5
         },
         {
             "text": "Resiliência",
             "points": 1,
-            "cumulativePoints": 2
+            "cumulativePoints": 5
         },
         {
             "text": "Falta de respeito",
@@ -28,12 +28,12 @@
         {
             "text": "Compromisso",
             "points": 1,
-            "cumulativePoints": 2
+            "cumulativePoints": 5
         },
         {
             "text": "Prioridade",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 3
         },
         {
             "text": "Falta de atenção",

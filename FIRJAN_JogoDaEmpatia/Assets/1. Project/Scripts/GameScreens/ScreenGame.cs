@@ -90,6 +90,7 @@ public class ScreenGame : CanvasScreen
     [SerializeField] private CanvasFadeIn wordsContainerFadeIn; // Componente para fazer fade in do container de palavras
     [SerializeField] private Button wordButtonPrefab;
     [SerializeField] private Button confirmButton;
+    [SerializeField] private Button skipWaitButton; // Botão para pular os 10 segundos de espera
     [SerializeField] private TextMeshProUGUI feedbackText;
     [Header("Word Cloud Summary References")]
     [SerializeField] private CanvasGroup inRoundCanvasGroup;
@@ -130,6 +131,7 @@ public class ScreenGame : CanvasScreen
     private List<string> currentRoundSelectedWords = new List<string>(); // Palavras selecionadas na rodada atual
     private bool isAwaitingSummaryContinue = false;
     private List<WordData> currentRoundWordData = new List<WordData>(); // Dados da rodada atual
+    private bool skipWaitRequested = false; // Flag para indicar que o usuário pulou a espera
 
     #endregion
 
@@ -239,6 +241,10 @@ public class ScreenGame : CanvasScreen
         if (descriptionCanvasGroup != null)
             descriptionCanvasGroup.alpha = 0f;
 
+        // Esconde o botão de pular
+        if (skipWaitButton != null)
+            skipWaitButton.gameObject.SetActive(false);
+
         UpdateConfirmButtonLabel(true); // true = "Confirmar"
 
         // Inicia a primeira rodada
@@ -265,6 +271,13 @@ public class ScreenGame : CanvasScreen
 
         // Carrega os dados salvos da rodada ou cria dados padrão
         LoadRoundWordData(roundIndex, currentRound);
+
+        // Configura o botão de pular
+        if (skipWaitButton != null)
+        {
+            skipWaitButton.onClick.RemoveAllListeners();
+            skipWaitButton.onClick.AddListener(OnSkipWaitButtonPressed);
+        }
 
         // Esconde as palavras e botão de confirmar inicialmente
         if (wordsContainer != null)
@@ -300,10 +313,19 @@ public class ScreenGame : CanvasScreen
     /// </summary>
     private IEnumerator RoundImageSequence(int roundIndex, RoundData roundData)
     {
+        // IMPORTANTE: Aguarda até que a tela esteja realmente ativa antes de começar qualquer animação
+        while (!IsOn())
+        {
+            yield return null;
+        }
+
         Sprite image1 = GetImage1ForRound(roundIndex);
         Sprite image2 = GetImage2ForRound(roundIndex);
 
         // ===== FASE 1: Primeira imagem sozinha + texto de introdução =====
+
+        // Reseta a flag de pular
+        skipWaitRequested = false;
 
         // Desativa o texto explicativo da nuvem de palavras (só aparece na Phase 3)
         if (summaryLocalizedText != null)
@@ -340,8 +362,26 @@ public class ScreenGame : CanvasScreen
             yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 0f, 1f, fadeDuration));
         }
 
+        // Mostra o botão de pular após o fade in
+        if (skipWaitButton != null)
+        {
+            skipWaitButton.gameObject.SetActive(true);
+        }
+
         // Aguarda 10 segundos mostrando a primeira imagem e o texto de introdução
-        yield return new WaitForSeconds(imageTransitionDelay);
+        // Mas permite pular se o usuário clicar no botão
+        float elapsedTime = 0f;
+        while (elapsedTime < imageTransitionDelay && !skipWaitRequested)
+        {
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        // Esconde o botão de pular
+        if (skipWaitButton != null)
+        {
+            skipWaitButton.gameObject.SetActive(false);
+        }
 
         // ===== FASE 2: Duas imagens lado a lado + botões =====
 
@@ -604,6 +644,15 @@ public class ScreenGame : CanvasScreen
         {
             ConfirmChoices();
         }
+    }
+
+    /// <summary>
+    /// Método público chamado pelo botão de pular espera.
+    /// Pula os 10 segundos de espera inicial da rodada.
+    /// </summary>
+    public void OnSkipWaitButtonPressed()
+    {
+        skipWaitRequested = true;
     }
 
     /// <summary>

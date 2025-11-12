@@ -20,6 +20,8 @@ namespace FIRJAN.Utilities
     {
         public string situationTitlePT;
         public string situationTitleEN;
+        public string skipButtonPT;
+        public string skipButtonEN;
     }
 
     [Serializable]
@@ -110,6 +112,8 @@ namespace FIRJAN.Utilities
         public string texto3EN;
         public string texto4PT;
         public string texto4EN;
+        public string botaoFinalizarPT;
+        public string botaoFinalizarEN;
         public string indicador1PT;
         public string indicador1EN;
         public string indicador2PT;

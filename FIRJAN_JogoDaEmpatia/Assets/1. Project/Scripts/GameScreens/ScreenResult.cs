@@ -27,6 +27,11 @@ public class ScreenResult : CanvasScreen
     [SerializeField] private CanvasGroup postSuccessGroup;       // Grupo que aparece após POST
     [SerializeField] private GameObject objectToDisableAfterPost; // GameObject para desligar após POST bem-sucedido
     [SerializeField] private TextMeshProUGUI thankYouTitleText;   // Texto "OBRIGADO!" que aparece após POST
+    [SerializeField] private GameObject finishButton;             // Botão "Finalizar" que aparece após POST
+
+    [Header("Localized Text References")]
+    [SerializeField] private FIRJAN.Utilities.LocalizedText thankYouLocalizedText; // LocalizedText para "OBRIGADO!"
+    [SerializeField] private FIRJAN.Utilities.LocalizedText finishButtonLocalizedText; // LocalizedText do botão Finalizar
 
     [Header("Debug Settings")]
     [SerializeField] private KeyCode debugNFCKey = KeyCode.N;    // Tecla para simular NFC em debug
@@ -40,6 +45,16 @@ public class ScreenResult : CanvasScreen
     [Header("Songs")]
     [SerializeField] private AudioSource endSongClip, nfcClip;
 
+    [Header("Auto Restart Timer")]
+    [SerializeField] private GameObject timerGameObject; // GameObject do timer que será ativado/desativado
+    [SerializeField] private TextMeshProUGUI timerText; // Texto que mostra os segundos restantes
+    [SerializeField] private UnityEngine.UI.Image timerFillImage; // Imagem preenchida que diminui com o tempo
+    [SerializeField] private float autoRestartTime = 20f; // Tempo em segundos para reiniciar automaticamente
+
+    // Controle do timer
+    private float currentTime;
+    private float initialTime;
+    private bool timerActive = false;
 
     #region Public Methods
 
@@ -77,6 +92,9 @@ public class ScreenResult : CanvasScreen
         // Envia dados para o sistema NFC
         SubmitToNFCSystem(scores);
 
+        // Inicia o timer de auto-reinicialização
+        StartAutoRestartTimer();
+
         // Log para debug
         Debug.Log($"Resultados finais - Pontuação: {finalScore}, " +
                  $"Empatia: {scores.empathy}, " +
@@ -95,12 +113,18 @@ public class ScreenResult : CanvasScreen
     }
 
     /// <summary>
-    /// Update para detectar tecla de debug do NFC.
+    /// Update para detectar tecla de debug do NFC e atualizar o timer.
     /// </summary>
     private void Update()
     {
-        // DEBUG: Simula leitura de NFC e POST bem-sucedido
-        #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // Atualiza o timer se estiver ativo
+        if (timerActive)
+        {
+            HandleAutoRestartTimer();
+        }
+
+        // DEBUG: Simula leitura de NFC e POST bem-sucedido (APENAS NO EDITOR)
+        #if UNITY_EDITOR
         if (Input.GetKeyDown(debugNFCKey))
         {
             Debug.Log("[ScreenResult] ===DEBUG=== Tecla de debug pressionada! Simulando NFC + POST bem-sucedido");
@@ -234,6 +258,12 @@ public class ScreenResult : CanvasScreen
             postSuccessGroup.interactable = false;
             postSuccessGroup.blocksRaycasts = false;
         }
+
+        // Esconde o botão "Finalizar" inicialmente
+        if (finishButton != null)
+        {
+            finishButton.SetActive(false);
+        }
     }
 
     /// <summary>
@@ -242,8 +272,16 @@ public class ScreenResult : CanvasScreen
     /// </summary>
     public void OnPostSuccess()
     {
+        Debug.Log("===========================================");
         Debug.Log("[ScreenResult] === OnPostSuccess CHAMADO ===");
+        Debug.Log("===========================================");
+        Debug.Log($"[ScreenResult] Timestamp: {System.DateTime.Now:HH:mm:ss.fff}");
+        Debug.Log($"[ScreenResult] GameObject ativo? {gameObject.activeInHierarchy}");
+        Debug.Log($"[ScreenResult] Component habilitado? {enabled}");
         Debug.Log("[ScreenResult] Iniciando transição para canvas de sucesso...");
+
+        // Para o timer de auto-restart quando o NFC é lido
+        StopAutoRestartTimer();
 
         // Toca o som do NFC (verificação de segurança)
         if (nfcClip != null)
@@ -256,7 +294,9 @@ public class ScreenResult : CanvasScreen
             Debug.LogWarning("[ScreenResult] nfcClip não configurado no Inspector!");
         }
 
+        Debug.Log("[ScreenResult] Chamando StartCoroutine(TransitionToSuccessAndExit())...");
         StartCoroutine(TransitionToSuccessAndExit());
+        Debug.Log("[ScreenResult] StartCoroutine chamado com sucesso!");
     }
 
     /// <summary>
@@ -316,11 +356,34 @@ public class ScreenResult : CanvasScreen
             Debug.Log("[ScreenResult] GameObject desligado após POST bem-sucedido");
         }
 
-        // Muda o título para "OBRIGADO!" (se configurado)
-        if (thankYouTitleText != null)
+        // Muda o título para "OBRIGADO!" usando LocalizedText
+        if (thankYouLocalizedText != null)
         {
+            thankYouLocalizedText.SetLocalizationKey("game_over", "texto3");
+            Debug.Log("[ScreenResult] Título mudado para LocalizedText: game_over.texto3");
+        }
+        else if (thankYouTitleText != null)
+        {
+            // Fallback se não tiver LocalizedText configurado
             thankYouTitleText.text = "OBRIGADO!";
-            Debug.Log("[ScreenResult] Título mudado para 'OBRIGADO!'");
+            Debug.Log("[ScreenResult] Título mudado para 'OBRIGADO!' (fallback)");
+        }
+
+        // Mostra o botão "Finalizar" e atualiza seu texto
+        if (finishButton != null)
+        {
+            finishButton.SetActive(true);
+
+            // Atualiza o texto do botão usando LocalizedText
+            if (finishButtonLocalizedText != null)
+            {
+                finishButtonLocalizedText.SetLocalizationKey("game_over", "botaoFinalizar");
+                Debug.Log("[ScreenResult] Botão 'Finalizar' ativado com LocalizedText: game_over.botaoFinalizar");
+            }
+            else
+            {
+                Debug.Log("[ScreenResult] Botão 'Finalizar' ativado (sem LocalizedText configurado)");
+            }
         }
 
         Debug.Log("[ScreenResult] ✓ Segundo canvas apareceu completamente. Aguardando 5 segundos...");
@@ -332,6 +395,17 @@ public class ScreenResult : CanvasScreen
         Debug.Log("[ScreenResult] Carregando scene 0 (menu principal)...");
         SceneManager.LoadScene(0);
         Debug.Log("[ScreenResult] LoadScene(0) chamado!");
+    }
+
+    /// <summary>
+    /// Método público para ser chamado pelo botão "Finalizar".
+    /// Volta imediatamente para o menu principal.
+    /// </summary>
+    public void OnFinishButtonClicked()
+    {
+        Debug.Log("[ScreenResult] Botão 'Finalizar' clicado! Voltando ao menu principal...");
+        StopAutoRestartTimer();
+        SceneManager.LoadScene(0);
     }
 
     /// <summary>
@@ -454,14 +528,17 @@ public class ScreenResult : CanvasScreen
     /// <param name="scores">Pontuações das habilidades</param>
     private void SubmitToNFCSystem(SkillScores scores)
     {
+        Debug.Log($"[ScreenResult] === SubmitToNFCSystem CHAMADO === Empathy: {scores.empathy}, ActiveListening: {scores.activeListening}, SelfAwareness: {scores.selfAwareness}");
+
         if (NFCGameService.Instance != null)
         {
+            Debug.Log("[ScreenResult] NFCGameService.Instance encontrado! Chamando SubmitGameResult...");
             NFCGameService.Instance.SubmitGameResult(scores.empathy, scores.activeListening, scores.selfAwareness);
-            Debug.Log("[ScreenResult] Dados enviados para sistema NFC");
+            Debug.Log("[ScreenResult] ✓ SubmitGameResult chamado com sucesso. Dados pendentes armazenados.");
         }
         else
         {
-            Debug.LogWarning("[ScreenResult] NFCGameService não encontrado");
+            Debug.LogError("[ScreenResult] ✗ NFCGameService.Instance é NULL! Sistema NFC não está inicializado!");
         }
     }
 
@@ -492,6 +569,104 @@ public class ScreenResult : CanvasScreen
     public void TestPostSuccessTransition()
     {
         OnPostSuccess();
+    }
+
+    #endregion
+
+    #region Timer Methods
+
+    /// <summary>
+    /// Inicia o timer de auto-reinicialização.
+    /// </summary>
+    private void StartAutoRestartTimer()
+    {
+        // Ativa o GameObject do timer
+        if (timerGameObject != null)
+        {
+            timerGameObject.SetActive(true);
+            Debug.Log("[ScreenResult] GameObject do timer ativado");
+        }
+
+        currentTime = autoRestartTime;
+        initialTime = autoRestartTime;
+        timerActive = true;
+        UpdateTimerUI();
+        Debug.Log($"[ScreenResult] Timer de auto-restart iniciado: {autoRestartTime} segundos");
+    }
+
+    /// <summary>
+    /// Para o timer de auto-reinicialização.
+    /// </summary>
+    private void StopAutoRestartTimer()
+    {
+        timerActive = false;
+
+        // Desativa o GameObject do timer
+        if (timerGameObject != null)
+        {
+            timerGameObject.SetActive(false);
+            Debug.Log("[ScreenResult] GameObject do timer desativado");
+        }
+
+        Debug.Log("[ScreenResult] Timer de auto-restart parado");
+    }
+
+    /// <summary>
+    /// Gerencia o timer de auto-reinicialização.
+    /// </summary>
+    private void HandleAutoRestartTimer()
+    {
+        currentTime -= Time.deltaTime;
+
+        if (currentTime <= 0)
+        {
+            currentTime = 0;
+            timerActive = false;
+            RestartApplication();
+        }
+
+        UpdateTimerUI();
+    }
+
+    /// <summary>
+    /// Atualiza o timer na UI.
+    /// </summary>
+    private void UpdateTimerUI()
+    {
+        UpdateTimerFill();
+
+        if (timerText != null)
+        {
+            int secondsRemaining = Mathf.CeilToInt(currentTime);
+            if (secondsRemaining < 0) secondsRemaining = 0;
+            timerText.text = $"{secondsRemaining}";
+        }
+    }
+
+    /// <summary>
+    /// Atualiza o fill da imagem do timer.
+    /// </summary>
+    private void UpdateTimerFill()
+    {
+        if (timerFillImage == null) return;
+
+        if (initialTime <= 0f)
+        {
+            timerFillImage.fillAmount = 0f;
+            return;
+        }
+
+        float normalizedTime = Mathf.Clamp01(currentTime / initialTime);
+        timerFillImage.fillAmount = normalizedTime;
+    }
+
+    /// <summary>
+    /// Reinicia a aplicação carregando a scene 0.
+    /// </summary>
+    private void RestartApplication()
+    {
+        Debug.Log("[ScreenResult] Tempo esgotado! Reiniciando aplicação...");
+        SceneManager.LoadScene(0);
     }
 
     #endregion

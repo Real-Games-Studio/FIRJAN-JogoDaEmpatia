@@ -8,17 +8,17 @@
         {
             "text": "Distração",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 2
         },
         {
             "text": "Resolução de problemas",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 6
         },
         {
             "text": "Colaboração",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 5
         },
         {
             "text": "Desorganização",
@@ -28,17 +28,17 @@
         {
             "text": "Descomprometimento",
             "points": 1,
-            "cumulativePoints": 2
+            "cumulativePoints": 3
         },
         {
             "text": "Estratégia",
             "points": 1,
-            "cumulativePoints": 2
+            "cumulativePoints": 5
         },
         {
             "text": "Parceria",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 3
         }
     ]
 }

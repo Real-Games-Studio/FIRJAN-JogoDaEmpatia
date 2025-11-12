@@ -1,8 +1,8 @@
 // CLEANED: single NFCGameService implementation
-using System.Collections;
-using UnityEngine;
-using UnityEngine.Networking;
 using System;
+using System.Net;
+using System.Threading.Tasks;
+using UnityEngine;
 using _4._NFC_Firjan.Scripts.Server;
 using _4._NFC_Firjan.Scripts.NFC;
 
@@ -41,19 +41,12 @@ public class NFCGameService : MonoBehaviour
     [Header("NFC Configuration")]
     [SerializeField] private bool enableDebugLogs = true;
 
-    [Header("Server Configuration")]
-    [SerializeField] private string serverIP = "127.0.0.1";
-    [SerializeField] private string serverPort = "3000";
-
     private NFCReceiver nfcReceiver;
     private ServerComunication serverCommunication;
     private string lastReadNfcId;
-    private EmpathyGameModel pendingGameData;
+    private GameModel pendingGameData;
     private bool isInitialized = false;
-
-    // Queue para executar ações na thread principal
-    private System.Collections.Generic.Queue<System.Action> mainThreadActions = new System.Collections.Generic.Queue<System.Action>();
-    private readonly object lockObject = new object();
+    private bool shouldNotifySuccess = false;
 
     #endregion
 
@@ -64,7 +57,6 @@ public class NFCGameService : MonoBehaviour
         if (_instance == null)
         {
             _instance = this;
-            DontDestroyOnLoad(gameObject);
             InitializeNFCService();
         }
         else if (_instance != this)
@@ -73,21 +65,13 @@ public class NFCGameService : MonoBehaviour
         }
     }
 
-    private void Start()
-    {
-        LoadServerConfiguration();
-    }
-
     private void Update()
     {
-        // Executa ações pendentes na thread principal
-        lock (lockObject)
+        // Executa NotifyPostSuccess na main thread
+        if (shouldNotifySuccess)
         {
-            while (mainThreadActions.Count > 0)
-            {
-                var action = mainThreadActions.Dequeue();
-                action?.Invoke();
-            }
+            shouldNotifySuccess = false;
+            NotifyPostSuccess();
         }
     }
 
@@ -110,8 +94,10 @@ public class NFCGameService : MonoBehaviour
 
         if (serverCommunication == null)
         {
-            LogNFC("ERRO: ServerComunication não encontrado! Certifique-se de que o prefab Server está na cena.");
-            return;
+            LogNFC("AVISO: ServerComunication não encontrado na cena.");
+            LogNFC("Criando componente ServerComunication...");
+            serverCommunication = gameObject.AddComponent<ServerComunication>();
+            LoadServerConfiguration();
         }
 
         SetupNFCEvents();
@@ -144,9 +130,9 @@ public class NFCGameService : MonoBehaviour
                 ServerConfig config = JsonUtility.FromJson<ServerConfig>(configJson);
                 if (config != null && !string.IsNullOrEmpty(config.serverIP))
                 {
-                    serverIP = config.serverIP;
-                    serverPort = config.serverPort;
-                    LogNFC($"Configuração carregada: {serverIP}:{serverPort}");
+                    serverCommunication.Ip = config.serverIP;
+                    serverCommunication.Port = int.Parse(config.serverPort);
+                    LogNFC($"Configuração carregada: {config.serverIP}:{config.serverPort}");
                 }
             }
             catch (Exception ex)
@@ -164,42 +150,51 @@ public class NFCGameService : MonoBehaviour
 
     #region NFC Events
 
-    private void OnNFCCardRead(string nfcId, string readerName)
+    private async void OnNFCCardRead(string nfcId, string readerName)
     {
-        // Garante que tudo seja executado na thread principal
-        RunOnMainThread(() =>
+        LogNFC("===========================================");
+        LogNFC("=== EVENTO OnNFCCardRead DISPARADO ===");
+        LogNFC("===========================================");
+        LogNFC($"Timestamp: {DateTime.Now:HH:mm:ss.fff}");
+        LogNFC($"Cartão ID: {nfcId}");
+        LogNFC($"Leitor: {readerName}");
+
+        lastReadNfcId = nfcId;
+        LogNFC($"lastReadNfcId armazenado: {lastReadNfcId}");
+
+        LogNFC($"pendingGameData é null? {pendingGameData == null}");
+
+        if (pendingGameData != null)
         {
-            LogNFC("=== CARTÃO NFC LIDO ===");
-            LogNFC($"Cartão: {nfcId} | Leitor: {readerName} | {DateTime.Now:HH:mm:ss.fff}");
+            LogNFC("✓ DADOS PENDENTES ENCONTRADOS!");
+            LogNFC($"Empathy (skill1): {pendingGameData.skill1}");
+            LogNFC($"ActiveListening (skill2): {pendingGameData.skill2}");
+            LogNFC($"SelfAwareness (skill3): {pendingGameData.skill3}");
 
-            lastReadNfcId = nfcId;
+            pendingGameData.nfcId = nfcId;
+            LogNFC($"nfcId atribuído: {pendingGameData.nfcId}");
 
-            if (pendingGameData != null)
-            {
-                LogNFC($"Dados pendentes encontrados! Associando ao NFC ID: {nfcId}");
-                LogNFC($"Dados antes: {pendingGameData}");
+            LogNFC("Chamando ServerComunication.UpdateNfcInfoFromGame...");
+            await SendGameDataToServer(pendingGameData);
 
-                pendingGameData.nfcId = nfcId;
+            pendingGameData = null;
+            LogNFC("Dados pendentes limpos após envio");
+        }
+        else
+        {
+            LogNFC("⚠ ⚠ ⚠ AVISO: Cartão lido mas NÃO HÁ dados do jogo pendentes!");
+            LogNFC("Certifique-se de que SubmitGameResult foi chamado ANTES de passar o cartão.");
+        }
 
-                LogNFC($"Dados depois: {pendingGameData}");
-                LogNFC("Chamando SendGameDataToServer...");
-
-                SendGameDataToServer(pendingGameData);
-
-                pendingGameData = null;
-                LogNFC("Dados pendentes limpos após envio");
-            }
-            else
-            {
-                LogNFC("⚠ AVISO: Cartão lido mas NÃO HÁ dados do jogo pendentes!");
-                LogNFC("Certifique-se de que SubmitGameResult foi chamado ANTES de passar o cartão.");
-            }
-        });
+        LogNFC("=== FIM OnNFCCardRead ===");
     }
 
     private void OnNFCCardRemoved()
     {
-        LogNFC("Cartão removido");
+        LogNFC("===========================================");
+        LogNFC("=== CARTÃO NFC REMOVIDO ===");
+        LogNFC("===========================================");
+        LogNFC($"Timestamp: {DateTime.Now:HH:mm:ss.fff}");
     }
 
     #endregion
@@ -209,17 +204,35 @@ public class NFCGameService : MonoBehaviour
     public void SubmitGameResult(int empathy, int activeListening, int selfAwareness)
     {
         LogNFC("=== SubmitGameResult CHAMADO ===");
-        LogNFC($"Parâmetros recebidos - Empathy: {empathy}, ActiveListening: {activeListening}, SelfAwareness: {selfAwareness}");
+        LogNFC($"Timestamp: {DateTime.Now:HH:mm:ss.fff}");
+        LogNFC($"Parâmetros recebidos:");
+        LogNFC($"  - Empathy: {empathy}");
+        LogNFC($"  - ActiveListening: {activeListening}");
+        LogNFC($"  - SelfAwareness: {selfAwareness}");
 
         if (!isInitialized)
         {
-            LogNFC("ERRO: Serviço NFC não inicializado!");
+            LogNFC("✗ ERRO: Serviço NFC não inicializado!");
             return;
         }
 
-        pendingGameData = new EmpathyGameModel("", empathy, activeListening, selfAwareness);
-        LogNFC($"✓ Dados armazenados com sucesso! Aguardando leitura do cartão NFC...");
-        LogNFC($"Dados pendentes: {pendingGameData}");
+        LogNFC("Criando GameModel...");
+        pendingGameData = new GameModel
+        {
+            nfcId = "", // Será preenchido quando o cartão for lido
+            gameId = 5,
+            skill1 = empathy,
+            skill2 = activeListening,
+            skill3 = selfAwareness
+        };
+
+        LogNFC("✓ ✓ ✓ Dados armazenados com SUCESSO!");
+        LogNFC($"pendingGameData.skill1 (Empathy): {pendingGameData.skill1}");
+        LogNFC($"pendingGameData.skill2 (ActiveListening): {pendingGameData.skill2}");
+        LogNFC($"pendingGameData.skill3 (SelfAwareness): {pendingGameData.skill3}");
+        LogNFC($"pendingGameData.gameId: {pendingGameData.gameId}");
+        LogNFC("Aguardando leitura do cartão NFC...");
+        LogNFC("=== FIM SubmitGameResult ===");
     }
 
     public string GetLastNfcId() => lastReadNfcId;
@@ -228,7 +241,7 @@ public class NFCGameService : MonoBehaviour
 
     #region Private Methods
 
-    private void SendGameDataToServer(EmpathyGameModel gameData)
+    private async Task SendGameDataToServer(GameModel gameData)
     {
         LogNFC("=== SendGameDataToServer CHAMADO ===");
 
@@ -240,48 +253,39 @@ public class NFCGameService : MonoBehaviour
 
         if (string.IsNullOrEmpty(gameData.nfcId))
         {
-            LogNFC($"ERRO: nfcId está vazio. gameData: {gameData}");
+            LogNFC($"ERRO: nfcId está vazio.");
             return;
         }
 
-        LogNFC($"Dados válidos! Iniciando POST para NFC ID: {gameData.nfcId}");
-        StartCoroutine(SendPostRequest(gameData));
-    }
+        LogNFC($"Dados válidos! Enviando POST para NFC ID: {gameData.nfcId}");
+        LogNFC($"URL: http://{serverCommunication.Ip}:{serverCommunication.Port}/users/{gameData.nfcId}");
+        LogNFC($"Payload: {gameData.ToString()}");
 
-    private IEnumerator SendPostRequest(EmpathyGameModel gameData)
-    {
-        LogNFC("=== COROUTINE SendPostRequest INICIADA ===");
-
-        string url = $"http://{serverIP}:{serverPort}/users/{gameData.nfcId}";
-        string jsonData = gameData.ToJson();
-        LogNFC($"POST -> {url}");
-        LogNFC($"Payload: {jsonData}");
-
-        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+        try
         {
-            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
+            HttpStatusCode statusCode = await serverCommunication.UpdateNfcInfoFromGame(gameData);
 
-            LogNFC("Enviando requisição HTTP...");
-            yield return request.SendWebRequest();
-            LogNFC("Requisição HTTP concluída!");
+            LogNFC($"Resposta do servidor: {statusCode}");
 
-            if (request.result == UnityWebRequest.Result.Success)
+            if (statusCode == HttpStatusCode.OK)
             {
-                LogNFC($"✓ POST SUCCESS: {request.downloadHandler.text}");
-                NotifyPostSuccess();
+                LogNFC("✓ ✓ ✓ POST SUCCESS ✓ ✓ ✓");
+                LogNFC("Agendando NotifyPostSuccess() para executar na main thread...");
+                shouldNotifySuccess = true;
             }
             else
             {
-                LogNFC($"✗ POST FAILED: {request.error}");
-                LogNFC($"Response Code: {request.responseCode}");
-                LogNFC($"URL tentada: {url}");
+                LogNFC($"✗ ✗ ✗ POST FAILED ✗ ✗ ✗");
+                LogNFC($"Status Code: {statusCode}");
             }
         }
+        catch (Exception ex)
+        {
+            LogNFC($"✗ ERRO na requisição: {ex.Message}");
+            LogNFC($"Stack trace: {ex.StackTrace}");
+        }
 
-        LogNFC("=== COROUTINE SendPostRequest FINALIZADA ===");
+        LogNFC("=== SendGameDataToServer FINALIZADO ===");
     }
 
     #endregion
@@ -295,30 +299,19 @@ public class NFCGameService : MonoBehaviour
 
     private void NotifyPostSuccess()
     {
-        // Garante que a notificação seja feita na thread principal
-        RunOnMainThread(() =>
-        {
-            var screen = FindFirstObjectByType<ScreenResult>();
-            if (screen != null)
-            {
-                LogNFC("Notificando ScreenResult sobre sucesso do POST");
-                screen.OnPostSuccess();
-            }
-            else
-            {
-                LogNFC("ScreenResult não encontrado para notificar sucesso do POST");
-            }
-        });
-    }
+        LogNFC("=== NotifyPostSuccess CHAMADO ===");
 
-    /// <summary>
-    /// Enfileira uma ação para ser executada na thread principal do Unity.
-    /// </summary>
-    private void RunOnMainThread(System.Action action)
-    {
-        lock (lockObject)
+        var screen = FindFirstObjectByType<ScreenResult>();
+        if (screen != null)
         {
-            mainThreadActions.Enqueue(action);
+            LogNFC("✓ ScreenResult encontrado! Chamando OnPostSuccess()...");
+            screen.OnPostSuccess();
+            LogNFC("✓ OnPostSuccess() chamado com sucesso");
+        }
+        else
+        {
+            LogNFC("✗ ERRO: ScreenResult não encontrado na cena!");
+            LogNFC("Certifique-se de que a ScreenResult existe e está ativa na hierarquia");
         }
     }
 
@@ -331,6 +324,6 @@ public class NFCGameService : MonoBehaviour
 [System.Serializable]
 public class ServerConfig
 {
-    public string serverIP = "127.0.0.1";
-    public string serverPort = "3000";
+    public string serverIP = "192.168.0.212";
+    public string serverPort = "8080";
 }

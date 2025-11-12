@@ -1,7 +1,9 @@
 {
     "common": {
         "situationTitlePT": "Situação {0}",
-        "situationTitleEN": "Situation {0}"
+        "situationTitleEN": "Situation {0}",
+        "skipButtonPT": "AVANÇAR",
+        "skipButtonEN": "SKIP"
     },
     "cta": {
         "titulo1PT": "Jogo da<br><color=#ffa600>   empatia</color>",
@@ -110,6 +112,8 @@
         "texto3EN": "THANK YOU!",
         "texto4PT": "Seus dados foram gravados<br>em seu perfil!",
         "texto4EN": "Your data has been saved<br>to your profile!",
+        "botaoFinalizarPT": "FINALIZAR",
+        "botaoFinalizarEN": "FINISH",
         "indicador1PT": "APRENDIZADO CONTÍNUO",
         "indicador1EN": "CONTINUOUS LEARNING",
         "indicador2PT": "ADAPTABILIDADE",

@@ -13,12 +13,12 @@
         {
             "text": "Resolução de problema",
             "points": 1,
-            "cumulativePoints": 7
+            "cumulativePoints": 12
         },
         {
             "text": "Falta de profissionalismo",
             "points": 1,
-            "cumulativePoints": 5
+            "cumulativePoints": 6
         },
         {
             "text": "Compromisso",
@@ -33,12 +33,12 @@
         {
             "text": "Respeito ao cliente",
             "points": 1,
-            "cumulativePoints": 7
+            "cumulativePoints": 11
         },
         {
             "text": "Negligente",
             "points": 1,
-            "cumulativePoints": 5
+            "cumulativePoints": 7
         }
     ]
 }

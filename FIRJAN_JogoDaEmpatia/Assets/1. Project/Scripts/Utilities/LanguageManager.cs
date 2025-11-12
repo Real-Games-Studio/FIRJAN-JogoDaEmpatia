@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using UnityEngine;
-using Newtonsoft.Json;
 
 namespace FIRJAN.Utilities
 {
@@ -43,7 +42,7 @@ namespace FIRJAN.Utilities
             if (File.Exists(filePath))
             {
                 string jsonContent = File.ReadAllText(filePath);
-                languageData = JsonConvert.DeserializeObject<LanguageData>(jsonContent);
+                languageData = JsonUtility.FromJson<LanguageData>(jsonContent);
                 Debug.Log("Language data loaded successfully!");
             }
             else

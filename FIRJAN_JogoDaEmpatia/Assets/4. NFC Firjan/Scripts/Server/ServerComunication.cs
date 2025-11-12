@@ -13,7 +13,7 @@ namespace _4._NFC_Firjan.Scripts.Server
 		/// Precisa ser colocado para receber do Json em cada aplicação.
 		/// </summary>
 		public string Ip;
-		
+
 		/// <summary>
 		/// Precisa ser colocado para receber do Json em cada aplicação.
 		/// </summary>
@@ -30,7 +30,7 @@ namespace _4._NFC_Firjan.Scripts.Server
 		{
 			return $"http://{Ip}:{Port}/users/{nfcId}/endgame";
 		}
-
+		
 		private string GetFullNfcUrl(string nfcId)
 		{
 			return $"http://{Ip}:{Port}/users/{nfcId}";
@@ -46,7 +46,7 @@ namespace _4._NFC_Firjan.Scripts.Server
 			var url = GetFullNfcUrl(gameInfo.nfcId);
 			var request = new HttpRequestMessage(HttpMethod.Post, url);
 			var content = new StringContent(gameInfo.ToString());
-			request.Content = content; 
+			request.Content = content;
 			Debug.Log($"Sending to {url}:{request.Content?.ReadAsStringAsync().Result}");
 			var response = _client.SendAsync(request).Result;
 			return response.StatusCode;
@@ -73,21 +73,21 @@ namespace _4._NFC_Firjan.Scripts.Server
 				return null;
 			}
 		}
-		
+
 		/// <summary>
 		/// Usado para enviar o nome do usuario para o Banco de dados e avisar que já passou pela última experiência
 		/// </summary>
 		/// <param name="endGameRequestModel"></param>
 		/// <param name="nfcId"></param>
 		/// <returns></returns>
-		public async Task<EndGameResponseModel> PostNameForEndGameInfo(EndGameRequestModel endGameRequestModel, 
+		public async Task<EndGameResponseModel> PostNameForEndGameInfo(EndGameRequestModel endGameRequestModel,
 			string nfcId)
 		{
 			var url = GetFullEndGameUrl(nfcId);
 			var request = new HttpRequestMessage(HttpMethod.Post, url);
 			var content = new StringContent(endGameRequestModel.ToString());
 			request.Content = content;
-			
+
 			Debug.Log($"Sending to {url}:{request.Content?.ReadAsStringAsync().Result}");
 			var response = _client.SendAsync(request).Result;
 			Debug.Log($"Response code is {response.StatusCode}");
@@ -100,8 +100,8 @@ namespace _4._NFC_Firjan.Scripts.Server
 				Debug.Log($"Response code is {response.StatusCode}");
 				return null;
 			}
-			
+
 		}
-		
+
 	}
 }
