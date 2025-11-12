@@ -28,7 +28,6 @@ namespace FIRJAN.Utilities
             if (Instance == null)
             {
                 Instance = this;
-                DontDestroyOnLoad(gameObject);
                 LoadLanguageData();
             }
             else

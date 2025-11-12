@@ -84,6 +84,7 @@ public class ScreenGame : CanvasScreen
     [SerializeField] private Image imageDisplay2;
     [SerializeField] private CanvasGroup imageDisplay2CanvasGroup;
     [SerializeField] private TextMeshProUGUI descriptionText;
+    [SerializeField] private CanvasGroup descriptionCanvasGroup; // CanvasGroup para fade in/out da descrição
     [SerializeField] private Transform wordsContainer;
     [SerializeField] private WordButtonAnimator wordButtonAnimator; // Componente para animar os botões
     [SerializeField] private CanvasFadeIn wordsContainerFadeIn; // Componente para fazer fade in do container de palavras
@@ -93,6 +94,7 @@ public class ScreenGame : CanvasScreen
     [Header("Word Cloud Summary References")]
     [SerializeField] private CanvasGroup inRoundCanvasGroup;
     [SerializeField] private CanvasGroup wordCloudSummaryCanvasGroup;
+    [SerializeField] private Transform selectedWordsContainer; // Container para mostrar apenas palavras selecionadas
     [SerializeField] private TextMeshProUGUI confirmButtonText;
     [SerializeField] private string confirmButtonDefaultLabel = "Confirmar";
     [SerializeField] private string confirmButtonContinueLabel = "Continuar";
@@ -114,6 +116,7 @@ public class ScreenGame : CanvasScreen
     [Header("Localized Text")]
     [SerializeField] private LocalizedText localizedTextHeader;
     [SerializeField] private LocalizedText descriptionLocalizedText;
+    [SerializeField] private LocalizedText summaryLocalizedText; // Texto explicativo da nuvem de palavras
     [SerializeField] private LocalizedText confirmButtonLocalizedText;
 
     #endregion
@@ -124,6 +127,7 @@ public class ScreenGame : CanvasScreen
     private int totalEmpatheticScore = 0;
     private List<Button> currentWordButtons = new List<Button>();
     private List<bool> selectedWords = new List<bool>();
+    private List<string> currentRoundSelectedWords = new List<string>(); // Palavras selecionadas na rodada atual
     private bool isAwaitingSummaryContinue = false;
     private List<WordData> currentRoundWordData = new List<WordData>(); // Dados da rodada atual
 
@@ -136,6 +140,30 @@ public class ScreenGame : CanvasScreen
         base.OnEnable();
 
         // Reinicia o jogo quando a tela é ativada
+        // Usa corrotina para garantir que WordCloudDisplay.Instance já foi inicializado
+        StartCoroutine(ResetGameDelayed());
+    }
+
+    /// <summary>
+    /// Versão com delay do ResetGame para garantir que WordCloudDisplay.Instance está pronto.
+    /// </summary>
+    private IEnumerator ResetGameDelayed()
+    {
+        // Aguarda até que WordCloudDisplay.Instance esteja disponível
+        int maxAttempts = 10;
+        int attempts = 0;
+        while (WordCloudDisplay.Instance == null && attempts < maxAttempts)
+        {
+            yield return null; // Aguarda um frame
+            attempts++;
+        }
+
+        if (WordCloudDisplay.Instance == null)
+        {
+            Debug.LogError("[ScreenGame] WordCloudDisplay.Instance ainda é nulo após aguardar! Verifique se o GameObject com WordCloudDisplay está na cena.");
+        }
+
+        // Agora pode chamar ResetGame com segurança
         ResetGame();
     }
 
@@ -207,6 +235,10 @@ public class ScreenGame : CanvasScreen
         if (imageDisplay2CanvasGroup != null)
             imageDisplay2CanvasGroup.alpha = 0f;
 
+        // Reseta o CanvasGroup da descrição
+        if (descriptionCanvasGroup != null)
+            descriptionCanvasGroup.alpha = 0f;
+
         UpdateConfirmButtonLabel(true); // true = "Confirmar"
 
         // Inicia a primeira rodada
@@ -228,6 +260,9 @@ public class ScreenGame : CanvasScreen
         RoundData currentRound = gameRounds[roundIndex];
         isAwaitingSummaryContinue = false;
 
+        // Limpa botões selecionados do round anterior (se houver)
+        ClearSelectedWordsButtons();
+
         // Carrega os dados salvos da rodada ou cria dados padrão
         LoadRoundWordData(roundIndex, currentRound);
 
@@ -237,12 +272,22 @@ public class ScreenGame : CanvasScreen
         if (confirmButton != null)
         {
             confirmButton.gameObject.SetActive(false);
-            confirmButton.interactable = true; // Sempre deixa interativo quando for aparecer
+            confirmButton.interactable = false; // Inicia desabilitado até que uma palavra seja selecionada
         }
 
         // Limpa o texto de feedback
         if (feedbackText != null)
             feedbackText.text = "";
+
+        // Reseta o header para "Situação X" ANTES de iniciar a sequência
+        // (necessário porque o round anterior pode ter mudado para "Resultados")
+        if (localizedTextHeader != null)
+        {
+            var roundNumber = roundIndex + 1;
+            localizedTextHeader.SetLocalizationKey("common", "situationTitle");
+            localizedTextHeader.SetFormatVariables(roundNumber.ToString());
+            Debug.Log($"[ScreenGame] Header resetado para: Situação {roundNumber}");
+        }
 
         // Inicia a sequência de imagens
         StartCoroutine(RoundImageSequence(roundIndex, currentRound));
@@ -250,13 +295,23 @@ public class ScreenGame : CanvasScreen
 
     /// <summary>
     /// Corrotina para gerenciar a sequência de imagens de uma rodada.
-    /// Mostra primeira imagem sozinha, depois as duas imagens lado a lado após confirmar.
+    /// FASE 1: Mostra primeira imagem + texto de intro por 10 segundos
+    /// FASE 2: Mostra duas imagens lado a lado + botões de escolha
     /// </summary>
     private IEnumerator RoundImageSequence(int roundIndex, RoundData roundData)
     {
         Sprite image1 = GetImage1ForRound(roundIndex);
+        Sprite image2 = GetImage2ForRound(roundIndex);
 
-        // Fase 1: Mostra primeira imagem sozinha no componente separado
+        // ===== FASE 1: Primeira imagem sozinha + texto de introdução =====
+
+        // Desativa o texto explicativo da nuvem de palavras (só aparece na Phase 3)
+        if (summaryLocalizedText != null)
+        {
+            summaryLocalizedText.gameObject.SetActive(false);
+        }
+
+        // Mostra primeira imagem sozinha
         if (singleImageDisplay != null && image1 != null)
         {
             singleImageDisplay.sprite = image1;
@@ -271,16 +326,59 @@ public class ScreenGame : CanvasScreen
             localizedTextHeader.SetFormatVariables(roundNumber.ToString());
         }
 
-        // Atualiza a descrição da situação usando LocalizedText
+        // Atualiza a descrição da situação (texto de introdução)
         UpdateSituationDescription(roundIndex);
 
-        // Fade in da primeira imagem
-        if (singleImageCanvasGroup != null)
+        // Fade in da primeira imagem E do texto de descrição simultaneamente
+        if (singleImageCanvasGroup != null && descriptionCanvasGroup != null)
+        {
+            StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 0f, 1f, fadeDuration));
+            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 0f, 1f, fadeDuration));
+        }
+        else if (singleImageCanvasGroup != null)
         {
             yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 0f, 1f, fadeDuration));
         }
 
-        // Cria os botões de palavras e mostra opções imediatamente após a primeira imagem
+        // Aguarda 10 segundos mostrando a primeira imagem e o texto de introdução
+        yield return new WaitForSeconds(imageTransitionDelay);
+
+        // ===== FASE 2: Duas imagens lado a lado + botões =====
+
+        // Esconde a imagem única E o texto de descrição simultaneamente
+        if (singleImageCanvasGroup != null && descriptionCanvasGroup != null)
+        {
+            StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+            singleImageDisplay.gameObject.SetActive(false);
+        }
+        else if (singleImageCanvasGroup != null)
+        {
+            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+            singleImageDisplay.gameObject.SetActive(false);
+        }
+
+        // Prepara as duas imagens lado a lado
+        if (imageDisplay1 != null && image1 != null)
+        {
+            imageDisplay1.sprite = image1;
+            imageDisplay1.gameObject.SetActive(true);
+        }
+
+        if (imageDisplay2 != null && image2 != null)
+        {
+            imageDisplay2.sprite = image2;
+            imageDisplay2.gameObject.SetActive(true);
+        }
+
+        // Fade in das duas imagens simultaneamente
+        if (imageDisplay1CanvasGroup != null && imageDisplay2CanvasGroup != null)
+        {
+            StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
+            yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 0f, 1f, fadeDuration));
+        }
+
+        // Cria os botões de palavras
         CreateWordButtons(roundData.words);
 
         if (wordsContainer != null)
@@ -292,18 +390,21 @@ public class ScreenGame : CanvasScreen
             yield return null;
         }
 
-        // Faz o fade in do container de palavras
+        // Faz o fade in do container de palavras (se tiver)
         if (wordsContainerFadeIn != null)
         {
             wordsContainerFadeIn.DoFadeIn();
         }
 
+        // Nota: A animação dos botões é feita pelo AnimateButtonsAfterDelay()
+        // que já foi iniciado pelo CreateWordButtons()
+
         if (confirmButton != null)
         {
             confirmButton.gameObject.SetActive(true);
-            confirmButton.interactable = true;
+            confirmButton.interactable = false; // Inicia desabilitado até que uma palavra seja selecionada
             UpdateConfirmButtonLabel(true); // true = "Confirmar"
-            Debug.Log("Botão de confirmar ativado e interativo");
+            Debug.Log("Botão de confirmar ativado (mas desabilitado até seleção)");
         }
     }
 
@@ -399,9 +500,17 @@ public class ScreenGame : CanvasScreen
             yield return null;
         }
 
-        yield return new WaitForSeconds(0.5f); // Aguarda o fade-in da tela
+        // Aguarda o fade-in da tela e o Grid Layout terminar de calcular
+        yield return new WaitForSeconds(0.3f);
+
+        // Aguarda mais alguns frames para o Grid Layout estabilizar
+        yield return null;
+        yield return null;
+
         if (wordButtonAnimator != null)
         {
+            // Reseta qualquer animação anterior antes de iniciar nova
+            wordButtonAnimator.ResetButtons();
             wordButtonAnimator.AnimateButtons();
         }
     }
@@ -429,7 +538,39 @@ public class ScreenGame : CanvasScreen
             }
 
             button.colors = colors;
+
+            // Atualiza o estado do botão de confirmar
+            UpdateConfirmButtonState();
         }
+    }
+
+    /// <summary>
+    /// Atualiza o estado do botão de confirmar baseado nas seleções.
+    /// O botão só fica habilitado se pelo menos 1 palavra foi selecionada.
+    /// </summary>
+    private void UpdateConfirmButtonState()
+    {
+        if (confirmButton == null || isAwaitingSummaryContinue)
+            return;
+
+        bool hasSelection = HasAnyWordSelected();
+        confirmButton.interactable = hasSelection;
+
+        Debug.Log($"[UpdateConfirmButtonState] Botão de confirmar {(hasSelection ? "habilitado" : "desabilitado")}");
+    }
+
+    /// <summary>
+    /// Verifica se pelo menos uma palavra foi selecionada.
+    /// </summary>
+    /// <returns>True se houver pelo menos 1 palavra selecionada</returns>
+    private bool HasAnyWordSelected()
+    {
+        foreach (bool selected in selectedWords)
+        {
+            if (selected)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -451,6 +592,7 @@ public class ScreenGame : CanvasScreen
 
     /// <summary>
     /// Método público chamado pelo botão principal. Controla fases de confirmação e resumo.
+    /// NOTA: O botão só fica habilitado se pelo menos 1 palavra foi selecionada (ver UpdateConfirmButtonState).
     /// </summary>
     public void OnConfirmButtonPressed()
     {
@@ -482,20 +624,39 @@ public class ScreenGame : CanvasScreen
 
         Debug.Log($"Palavras selecionadas: {selectedWords.Count}, Palavras da rodada: {currentRound.words.Count}");
 
+        // Limpa a lista de palavras selecionadas da rodada anterior
+        currentRoundSelectedWords.Clear();
+
         // Atualiza os dados das palavras selecionadas
-        for (int i = 0; i < selectedWords.Count && i < currentRound.words.Count && i < currentRoundWordData.Count; i++)
+        for (int i = 0; i < selectedWords.Count && i < currentRound.words.Count; i++)
         {
             if (selectedWords[i])
             {
-                // Incrementa a pontuação cumulativa da palavra
-                currentRoundWordData[i].cumulativePoints += 1;
-                Debug.Log($"Palavra '{currentRound.words[i].wordText}' incrementada para {currentRoundWordData[i].cumulativePoints} pontos cumulativos");
+                string selectedWordText = currentRound.words[i].wordText;
+
+                // Adiciona à lista de palavras selecionadas da rodada
+                currentRoundSelectedWords.Add(selectedWordText);
+
+                // IMPORTANTE: Procura a palavra pelo TEXTO, não pelo índice!
+                // Porque currentRoundWordData pode estar em ordem diferente dos botões
+                WordData wordData = currentRoundWordData.Find(w => w.text == selectedWordText);
+
+                if (wordData != null)
+                {
+                    // Incrementa a pontuação cumulativa da palavra
+                    wordData.cumulativePoints += 1;
+                    Debug.Log($"Palavra '{selectedWordText}' incrementada para {wordData.cumulativePoints} pontos cumulativos");
+                }
+                else
+                {
+                    Debug.LogError($"[ScreenGame] Palavra '{selectedWordText}' não encontrada em currentRoundWordData!");
+                }
 
                 // Verifica se é empática para pontuação
                 if (currentRound.words[i].isEmpathetic)
                 {
                     roundEmpatheticScore++;
-                    Debug.Log($"Palavra empática selecionada: {currentRound.words[i].wordText}");
+                    Debug.Log($"Palavra empática selecionada: {selectedWordText}");
                 }
             }
         }
@@ -513,56 +674,164 @@ public class ScreenGame : CanvasScreen
         totalEmpatheticScore += roundEmpatheticScore;
         Debug.Log($"Score da rodada: {roundEmpatheticScore}, Score total: {totalEmpatheticScore}");
 
-        // Mostra a segunda imagem e a nuvem de palavras
-        StartCoroutine(ShowSecondImageAndWordCloud());
+        // Mostra a nuvem de palavras (esconde imagens)
+        StartCoroutine(ShowWordCloudSummary());
     }
 
     /// <summary>
-    /// Corrotina para mostrar as duas imagens lado a lado e a nuvem de palavras.
+    /// Corrotina para esconder as imagens e mostrar a nuvem de palavras.
+    /// FASE 3: Esconde imagens, mostra nuvem de palavras + texto explicativo
     /// </summary>
-    private IEnumerator ShowSecondImageAndWordCloud()
+    private IEnumerator ShowWordCloudSummary()
     {
-        Sprite image1 = GetImage1ForRound(currentRoundIndex);
-        Sprite image2 = GetImage2ForRound(currentRoundIndex);
-
-        // Esconde a imagem única
-        if (singleImageCanvasGroup != null)
-        {
-            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
-            singleImageDisplay.gameObject.SetActive(false);
-        }
-
-        // Prepara as duas imagens lado a lado
-        if (imageDisplay1 != null && image1 != null)
-        {
-            imageDisplay1.sprite = image1;
-            imageDisplay1.gameObject.SetActive(true);
-        }
-
-        if (imageDisplay2 != null && image2 != null)
-        {
-            imageDisplay2.sprite = image2;
-            imageDisplay2.gameObject.SetActive(true);
-        }
-
-        // Fade in das duas imagens simultaneamente
+        // Esconde as duas imagens com fade out
         if (imageDisplay1CanvasGroup != null && imageDisplay2CanvasGroup != null)
         {
-            StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
-            yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 0f, 1f, fadeDuration));
+            StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+            yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+
+            imageDisplay1.gameObject.SetActive(false);
+            imageDisplay2.gameObject.SetActive(false);
         }
 
-        // Muda a descrição para o texto de resultados após as imagens aparecerem
-        if (descriptionLocalizedText != null)
+        // Muda o header para "Resultados"
+        if (localizedTextHeader != null)
         {
-            descriptionLocalizedText.SetLocalizationKey("situation_results", "texto1");
+            localizedTextHeader.SetLocalizationKey("situation_results", "titulo1");
         }
 
-        // Exibe mensagem de feedback da Aya
-        ShowAyaFeedback();
+        // Ativa e configura o texto explicativo da nuvem de palavras
+        if (summaryLocalizedText != null)
+        {
+            summaryLocalizedText.gameObject.SetActive(true);
+            summaryLocalizedText.SetLocalizationKey("situation_results", "texto1");
+        }
+
+        // Instancia os botões das palavras selecionadas no container de resultados
+        InstantiateSelectedWordsButtons();
 
         // Mostra o resumo da rodada com nuvem de palavras
         ShowRoundSummary();
+    }
+
+    /// <summary>
+    /// Instancia botões apenas das palavras selecionadas no container de resultados.
+    /// </summary>
+    private void InstantiateSelectedWordsButtons()
+    {
+        if (selectedWordsContainer == null)
+        {
+            Debug.LogWarning("[ScreenGame] selectedWordsContainer não está configurado!");
+            return;
+        }
+
+        if (wordButtonPrefab == null)
+        {
+            Debug.LogWarning("[ScreenGame] wordButtonPrefab não está configurado!");
+            return;
+        }
+
+        // Limpa botões anteriores do container de resultados
+        foreach (Transform child in selectedWordsContainer)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // Determina qual section usar baseado na rodada atual
+        string section = $"situation{currentRoundIndex + 1}";
+
+        Debug.Log($"[ScreenGame] Instanciando {currentRoundSelectedWords.Count} palavras selecionadas no container de resultados");
+
+        // Instancia apenas as palavras selecionadas
+        for (int i = 0; i < currentRoundSelectedWords.Count; i++)
+        {
+            string selectedWord = currentRoundSelectedWords[i];
+
+            Button wordButton = Instantiate(wordButtonPrefab, selectedWordsContainer);
+
+            // Remove o comportamento de clique (é apenas visual)
+            wordButton.interactable = false;
+
+            // Configura o texto do botão
+            LocalizedText localizedText = wordButton.GetComponentInChildren<LocalizedText>();
+            if (localizedText != null)
+            {
+                // Encontra o índice da palavra na lista original para pegar a key correta
+                int originalIndex = gameRounds[currentRoundIndex].words.FindIndex(w => w.wordText == selectedWord);
+                if (originalIndex >= 0)
+                {
+                    string key = $"opcao{originalIndex + 1}";
+                    localizedText.SetLocalizationKey(section, key);
+                    Debug.Log($"[ScreenGame] Botão criado: {selectedWord} (key: {section}.{key})");
+                }
+            }
+            else
+            {
+                // Fallback: usa o texto diretamente
+                TextMeshProUGUI buttonText = wordButton.GetComponentInChildren<TextMeshProUGUI>();
+                if (buttonText != null)
+                {
+                    buttonText.text = selectedWord;
+                }
+            }
+        }
+
+        Debug.Log($"[ScreenGame] {currentRoundSelectedWords.Count} botões de palavras selecionadas instanciados!");
+
+        // Anima o container e os botões
+        StartCoroutine(AnimateSelectedWordsContainer());
+    }
+
+    /// <summary>
+    /// Anima o container de palavras selecionadas e seus botões.
+    /// Primeiro faz o fade in do container (CanvasFadeIn), depois anima os botões (WordButtonAnimator).
+    /// </summary>
+    private IEnumerator AnimateSelectedWordsContainer()
+    {
+        // Primeiro faz o fade in do container se houver CanvasFadeIn
+        CanvasFadeIn containerFadeIn = selectedWordsContainer.GetComponent<CanvasFadeIn>();
+        if (containerFadeIn != null)
+        {
+            Debug.Log($"[ScreenGame] Fazendo fade in do selectedWordsContainer");
+            containerFadeIn.DoFadeIn();
+        }
+
+        // Aguarda alguns frames para o fade in e o Grid Layout calcular as posições
+        yield return null;
+        yield return null;
+        yield return new WaitForSeconds(0.2f);
+
+        // Depois anima os botões se houver WordButtonAnimator
+        WordButtonAnimator selectedWordsAnimator = selectedWordsContainer.GetComponent<WordButtonAnimator>();
+        if (selectedWordsAnimator != null)
+        {
+            Debug.Log($"[ScreenGame] Animando botões selecionados com WordButtonAnimator");
+            selectedWordsAnimator.ResetButtons();
+            selectedWordsAnimator.AnimateButtons();
+        }
+    }
+
+    /// <summary>
+    /// Limpa os botões de palavras selecionadas do container de resultados.
+    /// </summary>
+    private void ClearSelectedWordsButtons()
+    {
+        if (selectedWordsContainer == null) return;
+
+        Debug.Log("[ScreenGame] Limpando botões de palavras selecionadas do round anterior");
+
+        // Destrói todos os filhos do container
+        foreach (Transform child in selectedWordsContainer)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // Reseta o alpha do CanvasGroup se houver
+        CanvasGroup containerCanvasGroup = selectedWordsContainer.GetComponent<CanvasGroup>();
+        if (containerCanvasGroup != null)
+        {
+            containerCanvasGroup.alpha = 0f;
+        }
     }
 
     /// <summary>
@@ -662,14 +931,8 @@ public class ScreenGame : CanvasScreen
         // Carrega dados salvos ou cria dados padrão
         currentRoundWordData = WordScorePersistence.Instance.LoadRoundData(roundIndex, wordTexts);
 
-        // Garante que os textos estejam corretos (caso o JSON esteja desatualizado)
-        for (int i = 0; i < currentRoundWordData.Count && i < roundData.words.Count; i++)
-        {
-            if (currentRoundWordData[i].text != roundData.words[i].wordText)
-            {
-                currentRoundWordData[i].text = roundData.words[i].wordText;
-            }
-        }
+        // IMPORTANTE: NÃO modificar a ordem/textos dos dados carregados!
+        // A ordem será gerenciada automaticamente pela ordenação por cumulativePoints
 
         // Carrega os dados na nuvem de palavras
         if (WordCloudDisplay.Instance != null)
@@ -991,48 +1254,48 @@ public class ScreenGame : CanvasScreen
     {
         gameRounds.Clear();
 
-        // Rodada 1
+        // Rodada 1 - ORDEM CORRESPONDE AO JSON (opcao1PT até opcao8PT)
         RoundData round1 = new RoundData();
         round1.words.AddRange(new WordChoice[]
         {
-            new WordChoice { wordText = "Adaptação", isEmpathetic = true },
-            new WordChoice { wordText = "Desengajado", isEmpathetic = false },
-            new WordChoice { wordText = "Resolução de problema", isEmpathetic = true },
-            new WordChoice { wordText = "Falta de profissionalismo", isEmpathetic = false },
-            new WordChoice { wordText = "Compromisso", isEmpathetic = true },
-            new WordChoice { wordText = "Falta de comunicação", isEmpathetic = false },
-            new WordChoice { wordText = "Respeito ao cliente", isEmpathetic = true },
-            new WordChoice { wordText = "Negligente", isEmpathetic = false }
+            new WordChoice { wordText = "Adaptação", isEmpathetic = true },                   // opcao1PT
+            new WordChoice { wordText = "Resolução de problema", isEmpathetic = true },       // opcao2PT
+            new WordChoice { wordText = "Compromisso", isEmpathetic = true },                 // opcao3PT
+            new WordChoice { wordText = "Respeito ao cliente", isEmpathetic = true },         // opcao4PT
+            new WordChoice { wordText = "Desengajado", isEmpathetic = false },                // opcao5PT
+            new WordChoice { wordText = "Falta de profissionalismo", isEmpathetic = false },  // opcao6PT
+            new WordChoice { wordText = "Falta de comunicação", isEmpathetic = false },       // opcao7PT
+            new WordChoice { wordText = "Negligente", isEmpathetic = false }                  // opcao8PT
         });
         gameRounds.Add(round1);
 
-        // Rodada 2
+        // Rodada 2 - ORDEM CORRESPONDE AO JSON (opcao1PT até opcao8PT)
         RoundData round2 = new RoundData();
         round2.words.AddRange(new WordChoice[]
         {
-            new WordChoice { wordText = "Desleixo", isEmpathetic = false },
-            new WordChoice { wordText = "Adaptação", isEmpathetic = true },
-            new WordChoice { wordText = "Resiliência", isEmpathetic = true },
-            new WordChoice { wordText = "Falta de respeito", isEmpathetic = false },
-            new WordChoice { wordText = "Amadorismo", isEmpathetic = false },
-            new WordChoice { wordText = "Compromisso", isEmpathetic = true },
-            new WordChoice { wordText = "Prioridade", isEmpathetic = true },
-            new WordChoice { wordText = "Falta de atenção", isEmpathetic = false }
+            new WordChoice { wordText = "Desleixo", isEmpathetic = false },          // opcao1PT
+            new WordChoice { wordText = "Resiliência", isEmpathetic = true },        // opcao2PT
+            new WordChoice { wordText = "Amadorismo", isEmpathetic = false },        // opcao3PT
+            new WordChoice { wordText = "Prioridade", isEmpathetic = true },         // opcao4PT
+            new WordChoice { wordText = "Adaptação", isEmpathetic = true },          // opcao5PT
+            new WordChoice { wordText = "Falta de respeito", isEmpathetic = false }, // opcao6PT
+            new WordChoice { wordText = "Compromisso", isEmpathetic = true },        // opcao7PT
+            new WordChoice { wordText = "Falta de atenção", isEmpathetic = false }   // opcao8PT
         });
         gameRounds.Add(round2);
 
-        // Rodada 3
+        // Rodada 3 - ORDEM CORRESPONDE AO JSON (opcao1PT até opcao8PT)
         RoundData round3 = new RoundData();
         round3.words.AddRange(new WordChoice[]
         {
-            new WordChoice { wordText = "Improdutividade", isEmpathetic = false },
-            new WordChoice { wordText = "Distração", isEmpathetic = false },
-            new WordChoice { wordText = "Resolução de problemas", isEmpathetic = true },
-            new WordChoice { wordText = "Colaboração", isEmpathetic = true },
-            new WordChoice { wordText = "Desorganização", isEmpathetic = false },
-            new WordChoice { wordText = "Descomprometimento", isEmpathetic = false },
-            new WordChoice { wordText = "Estratégia", isEmpathetic = true },
-            new WordChoice { wordText = "Parceria", isEmpathetic = true }
+            new WordChoice { wordText = "Improdutividade", isEmpathetic = false },      // opcao1PT
+            new WordChoice { wordText = "Resolução de problemas", isEmpathetic = true }, // opcao2PT
+            new WordChoice { wordText = "Desorganização", isEmpathetic = false },        // opcao3PT
+            new WordChoice { wordText = "Estratégia", isEmpathetic = true },             // opcao4PT
+            new WordChoice { wordText = "Distração", isEmpathetic = false },             // opcao5PT
+            new WordChoice { wordText = "Colaboração", isEmpathetic = true },            // opcao6PT
+            new WordChoice { wordText = "Descomprometimento", isEmpathetic = false },    // opcao7PT
+            new WordChoice { wordText = "Parceria", isEmpathetic = true }                // opcao8PT
         });
         gameRounds.Add(round3);
     }

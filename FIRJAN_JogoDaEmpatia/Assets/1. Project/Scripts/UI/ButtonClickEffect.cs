@@ -21,6 +21,9 @@ namespace FIRJAN.UI
         [SerializeField] private int _punchVibrato = 10;
         [SerializeField] private float _punchElasticity = 0.5f;
 
+        [Header("Audio Settings")]
+        [SerializeField] private AudioSource _clickAudioSource;
+
         [Header("Hover Settings")]
         [SerializeField] private bool _enableHoverEffect = true;
         [SerializeField] private float _hoverScale = 1.05f;
@@ -53,8 +56,17 @@ namespace FIRJAN.UI
 
         private void OnButtonClickedInternal()
         {
-            // Apenas tocar a animação, sem bloquear a ação
+            // Tocar a animação e o áudio
             PlayClickAnimation();
+            PlayClickAudio();
+        }
+
+        private void PlayClickAudio()
+        {
+            if (_clickAudioSource != null)
+            {
+                _clickAudioSource.Play();
+            }
         }
 
         public void PlayClickAnimation()

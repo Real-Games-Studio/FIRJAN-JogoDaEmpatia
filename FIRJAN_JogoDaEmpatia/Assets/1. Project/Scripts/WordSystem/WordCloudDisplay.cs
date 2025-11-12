@@ -36,7 +36,7 @@ public class WordCloudDisplay : MonoBehaviour
 
     [Header("Auto-Population Settings")]
     [Tooltip("Auto-preencher slots no Start()?")]
-    public bool autoPopulateOnStart = true;
+    public bool autoPopulateOnStart = false; // DESABILITADO: Slots devem ser configurados manualmente no Inspector
 
     [Tooltip("Mostrar logs detalhados de debug?")]
     public bool showDebugLogs = true;
@@ -116,10 +116,21 @@ public class WordCloudDisplay : MonoBehaviour
 
         Debug.Log($"[WordCloudDisplay] >> Atualizando display com {currentRoundWords.Count} palavras");
 
-        // Atualiza cada slot com a palavra correspondente (sem ordenar!)
-        for (int i = 0; i < currentRoundWords.Count && i < wordSlots.Count; i++)
+        // IMPORTANTE: Ordena as palavras por cumulativePoints em ordem DECRESCENTE
+        // Palavras mais votadas (maior pontuação) ficam nas primeiras posições
+        var sortedWords = new List<WordData>(currentRoundWords);
+        sortedWords.Sort((a, b) => b.cumulativePoints.CompareTo(a.cumulativePoints));
+
+        Debug.Log($"[WordCloudDisplay] >> Palavras ordenadas por pontuação:");
+        for (int i = 0; i < sortedWords.Count && i < 5; i++)
         {
-            var wordData = currentRoundWords[i];
+            Debug.Log($"  {i + 1}º: '{sortedWords[i].text}' com {sortedWords[i].cumulativePoints} pontos");
+        }
+
+        // Atualiza cada slot com a palavra correspondente (agora ORDENADO!)
+        for (int i = 0; i < sortedWords.Count && i < wordSlots.Count; i++)
+        {
+            var wordData = sortedWords[i];
             var slot = wordSlots[i];
 
             Debug.Log($"[WordCloudDisplay] >> Atualizando slot {i}: '{wordData.text}' com {wordData.cumulativePoints} pontos");
@@ -129,11 +140,11 @@ public class WordCloudDisplay : MonoBehaviour
                 Debug.LogError($"[WordCloudDisplay] >> ERRO: Slot {i} tem textComponent NULL!");
             }
 
-            UpdateSlot(slot, wordData.text, wordData.cumulativePoints, currentRoundWords);
+            UpdateSlot(slot, wordData.text, wordData.cumulativePoints, sortedWords);
         }
 
         // Limpa slots extras (não deve acontecer se configurado corretamente)
-        for (int i = currentRoundWords.Count; i < wordSlots.Count; i++)
+        for (int i = sortedWords.Count; i < wordSlots.Count; i++)
         {
             Debug.Log($"[WordCloudDisplay] >> Limpando slot extra {i}");
             ClearSlot(wordSlots[i]);

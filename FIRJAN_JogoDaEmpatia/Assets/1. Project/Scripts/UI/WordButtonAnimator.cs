@@ -34,6 +34,17 @@ namespace FIRJAN.UI
         public void AnimateButtons()
         {
             Debug.Log($"<color=magenta>[ANIM-BTN]</color> AnimateButtons chamado em {gameObject.name}");
+
+            // Para todas as coroutines anteriores para evitar conflito
+            StopAllCoroutines();
+
+            // Mata todas as animações DOTween dos botões filhos
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                Transform child = transform.GetChild(i);
+                DOTween.Kill(child);
+            }
+
             StartCoroutine(AnimateButtonsCoroutine());
         }
 
@@ -41,7 +52,8 @@ namespace FIRJAN.UI
         {
             Debug.Log($"<color=magenta>[ANIM-BTN]</color> AnimateButtonsCoroutine iniciado");
 
-            // Aguardar 1 frame para o Grid Layout calcular as posições
+            // Aguardar frames adicionais para o Grid Layout calcular as posições
+            yield return null;
             yield return null;
 
             // Obter todos os botões filhos
@@ -78,9 +90,6 @@ namespace FIRJAN.UI
             }
 
             Debug.Log($"<color=magenta>[ANIM-BTN]</color> {buttonRects.Count} botões encontrados");
-
-            // Aguardar mais 1 frame para ter certeza que as posições estão corretas
-            yield return null;
 
             // Salvar as posições finais e preparar para animação
             List<Vector2> finalPositions = new List<Vector2>();

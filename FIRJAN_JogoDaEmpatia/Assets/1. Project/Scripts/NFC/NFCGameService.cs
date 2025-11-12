@@ -51,6 +51,10 @@ public class NFCGameService : MonoBehaviour
     private EmpathyGameModel pendingGameData;
     private bool isInitialized = false;
 
+    // Queue para executar ações na thread principal
+    private System.Collections.Generic.Queue<System.Action> mainThreadActions = new System.Collections.Generic.Queue<System.Action>();
+    private readonly object lockObject = new object();
+
     #endregion
 
     #region Unity Callbacks
@@ -72,6 +76,19 @@ public class NFCGameService : MonoBehaviour
     private void Start()
     {
         LoadServerConfiguration();
+    }
+
+    private void Update()
+    {
+        // Executa ações pendentes na thread principal
+        lock (lockObject)
+        {
+            while (mainThreadActions.Count > 0)
+            {
+                var action = mainThreadActions.Dequeue();
+                action?.Invoke();
+            }
+        }
     }
 
     #endregion
@@ -149,31 +166,35 @@ public class NFCGameService : MonoBehaviour
 
     private void OnNFCCardRead(string nfcId, string readerName)
     {
-        LogNFC("=== CARTÃO NFC LIDO ===");
-        LogNFC($"Cartão: {nfcId} | Leitor: {readerName} | {DateTime.Now:HH:mm:ss.fff}");
-
-        lastReadNfcId = nfcId;
-
-        if (pendingGameData != null)
+        // Garante que tudo seja executado na thread principal
+        RunOnMainThread(() =>
         {
-            LogNFC($"Dados pendentes encontrados! Associando ao NFC ID: {nfcId}");
-            LogNFC($"Dados antes: {pendingGameData}");
+            LogNFC("=== CARTÃO NFC LIDO ===");
+            LogNFC($"Cartão: {nfcId} | Leitor: {readerName} | {DateTime.Now:HH:mm:ss.fff}");
 
-            pendingGameData.nfcId = nfcId;
+            lastReadNfcId = nfcId;
 
-            LogNFC($"Dados depois: {pendingGameData}");
-            LogNFC("Chamando SendGameDataToServer...");
+            if (pendingGameData != null)
+            {
+                LogNFC($"Dados pendentes encontrados! Associando ao NFC ID: {nfcId}");
+                LogNFC($"Dados antes: {pendingGameData}");
 
-            SendGameDataToServer(pendingGameData);
+                pendingGameData.nfcId = nfcId;
 
-            pendingGameData = null;
-            LogNFC("Dados pendentes limpos após envio");
-        }
-        else
-        {
-            LogNFC("⚠ AVISO: Cartão lido mas NÃO HÁ dados do jogo pendentes!");
-            LogNFC("Certifique-se de que SubmitGameResult foi chamado ANTES de passar o cartão.");
-        }
+                LogNFC($"Dados depois: {pendingGameData}");
+                LogNFC("Chamando SendGameDataToServer...");
+
+                SendGameDataToServer(pendingGameData);
+
+                pendingGameData = null;
+                LogNFC("Dados pendentes limpos após envio");
+            }
+            else
+            {
+                LogNFC("⚠ AVISO: Cartão lido mas NÃO HÁ dados do jogo pendentes!");
+                LogNFC("Certifique-se de que SubmitGameResult foi chamado ANTES de passar o cartão.");
+            }
+        });
     }
 
     private void OnNFCCardRemoved()
@@ -274,15 +295,30 @@ public class NFCGameService : MonoBehaviour
 
     private void NotifyPostSuccess()
     {
-        var screen = FindFirstObjectByType<ScreenResult>();
-        if (screen != null)
+        // Garante que a notificação seja feita na thread principal
+        RunOnMainThread(() =>
         {
-            LogNFC("Notificando ScreenResult sobre sucesso do POST");
-            screen.OnPostSuccess();
-        }
-        else
+            var screen = FindFirstObjectByType<ScreenResult>();
+            if (screen != null)
+            {
+                LogNFC("Notificando ScreenResult sobre sucesso do POST");
+                screen.OnPostSuccess();
+            }
+            else
+            {
+                LogNFC("ScreenResult não encontrado para notificar sucesso do POST");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Enfileira uma ação para ser executada na thread principal do Unity.
+    /// </summary>
+    private void RunOnMainThread(System.Action action)
+    {
+        lock (lockObject)
         {
-            LogNFC("ScreenResult não encontrado para notificar sucesso do POST");
+            mainThreadActions.Enqueue(action);
         }
     }
 

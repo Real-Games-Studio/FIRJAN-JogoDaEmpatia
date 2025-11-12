@@ -25,12 +25,20 @@ public class ScreenResult : CanvasScreen
     [Header("Canvas Groups")]
     [SerializeField] private CanvasGroup waitingForCardGroup;    // Grupo com "Aproxime seu cartão"
     [SerializeField] private CanvasGroup postSuccessGroup;       // Grupo que aparece após POST
+    [SerializeField] private GameObject objectToDisableAfterPost; // GameObject para desligar após POST bem-sucedido
+    [SerializeField] private TextMeshProUGUI thankYouTitleText;   // Texto "OBRIGADO!" que aparece após POST
+
+    [Header("Debug Settings")]
+    [SerializeField] private KeyCode debugNFCKey = KeyCode.N;    // Tecla para simular NFC em debug
 
     [Header("Score Display Settings")]
     [SerializeField] private string empathyFormat = "Empatia: {0} pontos";
     [SerializeField] private string activeListeningFormat = "Escuta Ativa: {0} pontos";
     [SerializeField] private string selfAwarenessFormat = "Autoconsciência: {0} pontos";
     [SerializeField] private string totalScoreFormat = "Pontuação Total: {0}/12";
+
+    [Header("Songs")]
+    [SerializeField] private AudioSource endSongClip, nfcClip;
 
 
     #region Public Methods
@@ -80,6 +88,27 @@ public class ScreenResult : CanvasScreen
 
     #region Private Methods
 
+    public override void TurnOn()
+    {
+        base.TurnOn();
+        endSongClip.Play();
+    }
+
+    /// <summary>
+    /// Update para detectar tecla de debug do NFC.
+    /// </summary>
+    private void Update()
+    {
+        // DEBUG: Simula leitura de NFC e POST bem-sucedido
+        #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (Input.GetKeyDown(debugNFCKey))
+        {
+            Debug.Log("[ScreenResult] ===DEBUG=== Tecla de debug pressionada! Simulando NFC + POST bem-sucedido");
+            OnPostSuccess();
+        }
+        #endif
+    }
+
     /// <summary>
     /// Estrutura para armazenar as pontuações das habilidades.
     /// </summary>
@@ -99,38 +128,36 @@ public class ScreenResult : CanvasScreen
 
     /// <summary>
     /// Calcula os pontos de cada habilidade baseado na pontuação final.
+    /// Os valores são proporcionais: pontuação máxima (12) preenche a barra completa (22 segmentos).
+    /// Cada habilidade tem um peso diferente: Empatia 100%, Escuta Ativa 87.5%, Autoconsciência 68.75%.
+    /// IMPORTANTE: Usa Mathf.CeilToInt para arredondar PARA CIMA.
     /// </summary>
     /// <param name="finalScore">Pontuação final (0-12)</param>
     /// <returns>Estrutura com os pontos de cada habilidade</returns>
     private SkillScores CalculateSkillScores(int finalScore)
     {
-        if (finalScore >= 9 && finalScore <= 12)
-        {
-            // Pontuação alta: 9-12 pontos
-            return new SkillScores(
-                empathy: 9,
-                activeListening: 7,
-                selfAwareness: 5
-            );
-        }
-        else if (finalScore >= 6 && finalScore <= 8)
-        {
-            // Pontuação média: 6-8 pontos
-            return new SkillScores(
-                empathy: 8,
-                activeListening: 6,
-                selfAwareness: 4
-            );
-        }
-        else
-        {
-            // Pontuação baixa: 5 ou menos pontos
-            return new SkillScores(
-                empathy: 7,
-                activeListening: 5,
-                selfAwareness: 3
-            );
-        }
+        // Número de segmentos da barra (22 segmentos no Inspector)
+        const int maxSegments = 22;
+        const int maxScore = 12;
+
+        // Calcula a proporção da pontuação (0.0 a 1.0)
+        float scoreRatio = Mathf.Clamp01((float)finalScore / maxScore);
+
+        // Calcula os valores de cada habilidade proporcionalmente
+        // Empatia: 100% da barra quando score = 12 (22 segmentos)
+        int empathy = Mathf.CeilToInt(scoreRatio * maxSegments);
+
+        // Escuta Ativa: 87.5% da barra quando score = 12 (19.25 → 20 segmentos)
+        int activeListening = Mathf.CeilToInt(scoreRatio * maxSegments * 0.875f);
+
+        // Autoconsciência: 68.75% da barra quando score = 12 (15.125 → 16 segmentos)
+        int selfAwareness = Mathf.CeilToInt(scoreRatio * maxSegments * 0.6875f);
+
+        return new SkillScores(
+            empathy: empathy,
+            activeListening: activeListening,
+            selfAwareness: selfAwareness
+        );
     }
 
     /// <summary>
@@ -211,17 +238,29 @@ public class ScreenResult : CanvasScreen
 
     /// <summary>
     /// Método público chamado pelo NFCGameService quando o POST é bem-sucedido.
-    /// Faz a transição para o segundo CanvasGroup e aguarda 4 segundos antes de voltar ao menu.
+    /// Faz a transição para o segundo CanvasGroup e aguarda 5 segundos antes de voltar ao menu.
     /// </summary>
     public void OnPostSuccess()
     {
         Debug.Log("[ScreenResult] === OnPostSuccess CHAMADO ===");
         Debug.Log("[ScreenResult] Iniciando transição para canvas de sucesso...");
+
+        // Toca o som do NFC (verificação de segurança)
+        if (nfcClip != null)
+        {
+            nfcClip.Play();
+            Debug.Log("[ScreenResult] Som do NFC tocando!");
+        }
+        else
+        {
+            Debug.LogWarning("[ScreenResult] nfcClip não configurado no Inspector!");
+        }
+
         StartCoroutine(TransitionToSuccessAndExit());
     }
 
     /// <summary>
-    /// Faz a transição suave entre os CanvasGroups e volta ao menu após 4 segundos.
+    /// Faz a transição suave entre os CanvasGroups e volta ao menu após 30 segundos.
     /// </summary>
     private System.Collections.IEnumerator TransitionToSuccessAndExit()
     {
@@ -270,10 +309,24 @@ public class ScreenResult : CanvasScreen
             Debug.Log("[ScreenResult] postSuccessGroup ativado");
         }
 
-        Debug.Log("[ScreenResult] ✓ Segundo canvas apareceu completamente. Aguardando 4 segundos...");
+        // Desliga o GameObject configurado (se houver)
+        if (objectToDisableAfterPost != null)
+        {
+            objectToDisableAfterPost.SetActive(false);
+            Debug.Log("[ScreenResult] GameObject desligado após POST bem-sucedido");
+        }
 
-        // Aguarda 4 segundos APÓS o segundo canvas aparecer completamente
-        yield return new WaitForSeconds(4f);
+        // Muda o título para "OBRIGADO!" (se configurado)
+        if (thankYouTitleText != null)
+        {
+            thankYouTitleText.text = "OBRIGADO!";
+            Debug.Log("[ScreenResult] Título mudado para 'OBRIGADO!'");
+        }
+
+        Debug.Log("[ScreenResult] ✓ Segundo canvas apareceu completamente. Aguardando 5 segundos...");
+
+        // Aguarda 5 segundos APÓS o segundo canvas aparecer completamente
+        yield return new WaitForSeconds(5f);
 
         // Volta para a scene 0 (menu principal)
         Debug.Log("[ScreenResult] Carregando scene 0 (menu principal)...");
