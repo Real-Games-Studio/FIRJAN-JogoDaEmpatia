@@ -59,6 +59,17 @@ namespace FIRJAN.UI
             // Tocar a animação e o áudio
             PlayClickAnimation();
             PlayClickAudio();
+
+            // Resetar o timer de inatividade
+            ResetInactivityTimer();
+        }
+
+        private void ResetInactivityTimer()
+        {
+            if (ScreenCanvasController.instance != null)
+            {
+                ScreenCanvasController.instance.ResetInactiveTimer();
+            }
         }
 
         private void PlayClickAudio()

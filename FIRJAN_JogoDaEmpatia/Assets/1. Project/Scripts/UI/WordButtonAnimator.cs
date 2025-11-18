@@ -113,7 +113,7 @@ namespace FIRJAN.UI
             }
 
             // Animar cada botão com delay
-            Debug.Log($"<color=magenta>[ANIM-BTN]</color> Iniciando animação de {buttonRects.Count} botões");
+            // Debug.Log($"<color=magenta>[ANIM-BTN]</color> Iniciando animação de {buttonRects.Count} botões");
 
             for (int i = 0; i < buttonRects.Count; i++)
             {
@@ -122,7 +122,7 @@ namespace FIRJAN.UI
                 CanvasGroup canvasGroup = buttonCanvasGroups[index];
                 LayoutElement layoutElement = buttonLayoutElements[index];
 
-                Debug.Log($"<color=magenta>[ANIM-BTN]</color> Animando botão {index}: {rect.name} de {rect.anchoredPosition} para {finalPositions[index]}");
+                // Debug.Log($"<color=magenta>[ANIM-BTN]</color> Animando botão {index}: {rect.name} de {rect.anchoredPosition} para {finalPositions[index]}");
 
                 // Animar posição
                 rect.DOAnchorPos(finalPositions[index], animationDuration)
@@ -139,7 +139,7 @@ namespace FIRJAN.UI
                 // Animar fade se ativado
                 if (useFade && canvasGroup != null)
                 {
-                    Debug.Log($"<color=magenta>[ANIM-BTN]</color> Fazendo fade do botão {index} de alpha {canvasGroup.alpha} para 1");
+                    // Debug.Log($"<color=magenta>[ANIM-BTN]</color> Fazendo fade do botão {index} de alpha {canvasGroup.alpha} para 1");
                     canvasGroup.DOFade(1f, animationDuration * 0.7f);
                 }
 
@@ -150,7 +150,7 @@ namespace FIRJAN.UI
                 }
             }
 
-            Debug.Log($"<color=magenta>[ANIM-BTN]</color> Animação completa!");
+            // Debug.Log($"<color=magenta>[ANIM-BTN]</color> Animação completa!");
         }
 
         /// <summary>

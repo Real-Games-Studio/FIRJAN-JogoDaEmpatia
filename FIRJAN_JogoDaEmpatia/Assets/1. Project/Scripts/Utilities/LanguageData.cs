@@ -22,6 +22,10 @@ namespace FIRJAN.Utilities
         public string situationTitleEN;
         public string skipButtonPT;
         public string skipButtonEN;
+        public string phase2DescriptionPT;
+        public string phase2DescriptionEN;
+        public string phase3DescriptionPT;
+        public string phase3DescriptionEN;
     }
 
     [Serializable]

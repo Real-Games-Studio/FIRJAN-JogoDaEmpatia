@@ -20,6 +20,9 @@ public class ScreenCanvasController : MonoBehaviour
     public TMP_Text timeOut;
     [SerializeField] private Image timeoutFillImage;
 
+    // Flag para controlar se o timer do CTA está ativo
+    public static bool isInCtaMode = false;
+
     private void OnEnable()
     {
         // Registra o m�todo CallScreenListner como ouvinte do evento CallScreen
@@ -45,6 +48,13 @@ public class ScreenCanvasController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        // Se estiver no modo CTA, o ScreenCta cuida do timer de 10 minutos
+        // Então aqui não fazemos nada
+        if (isInCtaMode)
+        {
+            return;
+        }
+
         float totalTime = appConfig != null ? appConfig.maxInactiveTime : 0f;
 
         if (currentScreen != inicialScreen)
@@ -88,6 +98,13 @@ public class ScreenCanvasController : MonoBehaviour
     public void NFCInputHandler(string obj)
     {
         inactiveTimer = 0;
+    }
+    
+    public void ResetInactiveTimer()
+    {
+        inactiveTimer = 0;
+        float totalTime = appConfig != null ? appConfig.maxInactiveTime : 0f;
+        UpdateTimerUI(totalTime);
     }
 
     public void CallAnyScreenByName(string name)

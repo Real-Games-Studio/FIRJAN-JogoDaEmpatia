@@ -3,42 +3,42 @@
         {
             "text": "Adaptação",
             "points": 1,
-            "cumulativePoints": 4
+            "cumulativePoints": 8
         },
         {
             "text": "Desengajado",
             "points": 1,
-            "cumulativePoints": 6
+            "cumulativePoints": 13
         },
         {
             "text": "Resolução de problema",
             "points": 1,
-            "cumulativePoints": 12
+            "cumulativePoints": 34
         },
         {
             "text": "Falta de profissionalismo",
             "points": 1,
-            "cumulativePoints": 6
+            "cumulativePoints": 21
         },
         {
             "text": "Compromisso",
             "points": 1,
-            "cumulativePoints": 3
+            "cumulativePoints": 4
         },
         {
             "text": "Falta de comunicação",
             "points": 1,
-            "cumulativePoints": 4
+            "cumulativePoints": 7
         },
         {
             "text": "Respeito ao cliente",
             "points": 1,
-            "cumulativePoints": 11
+            "cumulativePoints": 21
         },
         {
             "text": "Negligente",
             "points": 1,
-            "cumulativePoints": 7
+            "cumulativePoints": 13
         }
     ]
 }

@@ -35,6 +35,24 @@ namespace FIRJAN.Utilities
             }
         }
 
+        private void Start()
+        {
+            // Trigger initial language change event after one frame
+            // This ensures all LocalizedText components are subscribed before the event fires
+            StartCoroutine(TriggerInitialLanguageUpdate());
+        }
+
+        private System.Collections.IEnumerator TriggerInitialLanguageUpdate()
+        {
+            // Wait one frame to ensure all OnEnable/Start subscriptions are registered
+            yield return null;
+
+            Debug.Log($"[LanguageManager] Triggering initial language update. Current language: {currentLanguage}");
+
+            // Fire the event to update all LocalizedText components with current language
+            OnLanguageChanged?.Invoke();
+        }
+
         private void LoadLanguageData()
         {
             string filePath = Path.Combine(Application.streamingAssetsPath, "language.json");
@@ -54,9 +72,22 @@ namespace FIRJAN.Utilities
         public void SetLanguage(Language language)
         {
             currentLanguage = language;
-            Debug.Log($"[LanguageManager] Language set to: {language}");
-            OnLanguageChanged?.Invoke();
-            Debug.Log($"[LanguageManager] OnLanguageChanged invoked. Subscribers: {OnLanguageChanged?.GetInvocationList().Length ?? 0}");
+            // Debug.Log($"[Problema2][LanguageManager] Language set to: {language}");
+
+            if (OnLanguageChanged != null)
+            {
+                // Debug.Log($"[Problema2][LanguageManager] BEFORE Invoke - Subscribers: {OnLanguageChanged.GetInvocationList().Length}");
+                // foreach (var subscriber in OnLanguageChanged.GetInvocationList())
+                // {
+                //     Debug.Log($"[Problema2][LanguageManager] Subscriber: {subscriber.Target?.GetType().Name ?? "NULL"}.{subscriber.Method.Name}");
+                // }
+                OnLanguageChanged.Invoke();
+                // Debug.Log($"[Problema2][LanguageManager] AFTER Invoke - Event fired successfully");
+            }
+            else
+            {
+                Debug.LogWarning("[Problema2][LanguageManager] OnLanguageChanged is NULL! No subscribers!");
+            }
         }
 
         public void ToggleLanguage()
@@ -67,43 +98,59 @@ namespace FIRJAN.Utilities
 
         public string GetLocalizedText(string section, string key)
         {
+            // Debug.Log($"[Problema1][LanguageManager] GetLocalizedText called - section: '{section}', key: '{key}'");
+
             if (languageData == null)
             {
-                Debug.LogError("Language data not loaded!");
+                Debug.LogError("[Problema1] Language data not loaded!");
                 return string.Empty;
             }
 
             string suffix = currentLanguage == Language.Portuguese ? "PT" : "EN";
             string fullKey = key + suffix;
 
+            // Debug.Log($"[Problema1][LanguageManager] Full key with suffix: '{fullKey}', Current language: {currentLanguage}");
+
             try
             {
+                string result = string.Empty;
                 switch (section.ToLower())
                 {
                     case "common":
-                        return GetFieldValue(languageData.common, fullKey);
+                        result = GetFieldValue(languageData.common, fullKey);
+                        break;
                     case "cta":
-                        return GetFieldValue(languageData.cta, fullKey);
+                        result = GetFieldValue(languageData.cta, fullKey);
+                        break;
                     case "situation1":
-                        return GetFieldValue(languageData.situation1, fullKey);
+                        result = GetFieldValue(languageData.situation1, fullKey);
+                        break;
                     case "situation2":
-                        return GetFieldValue(languageData.situation2, fullKey);
+                        result = GetFieldValue(languageData.situation2, fullKey);
+                        break;
                     case "situation3":
-                        return GetFieldValue(languageData.situation3, fullKey);
+                        result = GetFieldValue(languageData.situation3, fullKey);
+                        break;
                     case "situation_results":
-                        return GetFieldValue(languageData.situation_results, fullKey);
+                        result = GetFieldValue(languageData.situation_results, fullKey);
+                        break;
                     case "game_over":
-                        return GetFieldValue(languageData.game_over, fullKey);
+                        result = GetFieldValue(languageData.game_over, fullKey);
+                        break;
                     case "header":
-                        return GetFieldValue(languageData.header, fullKey);
+                        result = GetFieldValue(languageData.header, fullKey);
+                        break;
                     default:
-                        Debug.LogWarning($"Section '{section}' not found!");
+                        Debug.LogWarning($"[Problema1] Section '{section}' not found!");
                         return string.Empty;
                 }
+
+                // Debug.Log($"[Problema1][LanguageManager] Returning text (first 50 chars): '{(result.Length > 50 ? result.Substring(0, 50) + "..." : result)}'");
+                return result;
             }
             catch (Exception e)
             {
-                Debug.LogError($"Error getting localized text for section '{section}' and key '{key}': {e.Message}");
+                Debug.LogError($"[Problema1] Error getting localized text for section '{section}' and key '{key}': {e.Message}");
                 return string.Empty;
             }
         }

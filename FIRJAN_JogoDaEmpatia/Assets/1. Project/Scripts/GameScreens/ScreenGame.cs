@@ -9,22 +9,43 @@ using FIRJAN.UI;
 /// <summary>
 /// Script para gerenciar a lógica principal do Jogo da Empatia.
 /// Controla as 3 rodadas do jogo e calcula a pontuação de empatia.
-/// 
-/// COMPORTAMENTO DAS RODADAS:
-/// 1. Mostra primeira imagem com fade in e descrição da situação específica da rodada
-/// 2. Após 10 segundos, segunda imagem aparece ao lado com fade in e pergunta "Qual sua opinião sobre isso?"
-/// 3. Exibe as opções de palavras para seleção
-/// 4. Após confirmação, avança para próxima rodada ou vai para resultados
-/// 
+///
+/// COMPORTAMENTO DAS RODADAS (4 FASES):
+/// FASE 1 - Introdução:
+///   - Mostra primeira imagem com descrição da situação
+///   - Botão "Avançar" para prosseguir
+///
+/// FASE 2 - Primeira Escolha:
+///   - Mantém primeira imagem e texto de descrição visíveis
+///   - Mostra botões de palavras para seleção
+///   - Botão "Confirmar" (habilitado apenas se pelo menos 1 palavra selecionada)
+///
+/// FASE 3 - Revisão com Contexto Completo:
+///   - Mostra duas imagens lado a lado
+///   - Mantém texto de descrição visível
+///   - Permite re-seleção das palavras
+///   - Botão "Continuar" (sempre habilitado)
+///
+/// FASE 4 - Resultados:
+///   - Esconde imagens e texto de descrição
+///   - Mostra botões selecionados + nuvem de palavras + texto explicativo
+///   - Botão "Avançar" para próximo round ou tela final
+///
 /// SITUAÇÕES DAS RODADAS:
 /// Situação 1: Em uma reunião online importante com um cliente, Marcos não liga a câmera.
 /// Situação 2: Funcionário chega atrasado e de moletom numa reunião super importante com clientes.
 /// Situação 3: Funcionária toma café com outro colaborador enquanto o resto da equipe trabalha sem parar.
-/// 
+///
 /// CONFIGURAÇÃO DAS IMAGENS:
 /// - Arraste as 6 sprites nos campos: round1Image1, round1Image2, round2Image1, round2Image2, round3Image1, round3Image2
-/// - UI References: imageDisplay1 + CanvasGroup, imageDisplay2 + CanvasGroup, descriptionText, wordsContainer, etc.
+/// - UI References:
+///   * imagesHorizontalLayoutGroup: RectTransform do HorizontalLayoutGroup pai (para force rebuild)
+///   * imageDisplay1GO/imageDisplay2GO: GameObjects dentro do HorizontalLayoutGroup
+///   * imageDisplay1/imageDisplay2: Componentes Image dos GameObjects
+///   * imageDisplay1CanvasGroup/imageDisplay2CanvasGroup: CanvasGroups para fade in/out
+///   * descriptionText: TextMeshProUGUI com AutoSizeOptions (65 para 1 imagem, 35 para 2 imagens)
 /// - Efeito de fade controlado por fadeDuration (padrão 1 segundo)
+/// - Layout é automaticamente reconstruído quando imagens são ativadas/desativadas
 /// </summary>
 public class ScreenGame : CanvasScreen
 {
@@ -61,26 +82,43 @@ public class ScreenGame : CanvasScreen
     [Tooltip("Dados das 3 rodadas do jogo")]
     public List<RoundData> gameRounds = new List<RoundData>();
 
-    [Header("Round Images - 6 Sprites Total")]
-    [Tooltip("Imagem 1 da Rodada 1")]
-    public Sprite round1Image1;
-    [Tooltip("Imagem 2 da Rodada 1")]
-    public Sprite round1Image2;
-    [Tooltip("Imagem 1 da Rodada 2")]
-    public Sprite round2Image1;
-    [Tooltip("Imagem 2 da Rodada 2")]
-    public Sprite round2Image2;
-    [Tooltip("Imagem 1 da Rodada 3")]
-    public Sprite round3Image1;
-    [Tooltip("Imagem 2 da Rodada 3")]
-    public Sprite round3Image2;
+    [Header("Round Images - PT (Portuguese)")]
+    [Tooltip("Imagem 1 da Rodada 1 - PT")]
+    public Sprite round1Image1PT;
+    [Tooltip("Imagem 2 da Rodada 1 - PT")]
+    public Sprite round1Image2PT;
+    [Tooltip("Imagem 1 da Rodada 2 - PT")]
+    public Sprite round2Image1PT;
+    [Tooltip("Imagem 2 da Rodada 2 - PT")]
+    public Sprite round2Image2PT;
+    [Tooltip("Imagem 1 da Rodada 3 - PT")]
+    public Sprite round3Image1PT;
+    [Tooltip("Imagem 2 da Rodada 3 - PT")]
+    public Sprite round3Image2PT;
+
+    [Header("Round Images - EN (English)")]
+    [Tooltip("Imagem 1 da Rodada 1 - EN")]
+    public Sprite round1Image1EN;
+    [Tooltip("Imagem 2 da Rodada 1 - EN")]
+    public Sprite round1Image2EN;
+    [Tooltip("Imagem 1 da Rodada 2 - EN")]
+    public Sprite round2Image1EN;
+    [Tooltip("Imagem 2 da Rodada 2 - EN")]
+    public Sprite round2Image2EN;
+    [Tooltip("Imagem 1 da Rodada 3 - EN")]
+    public Sprite round3Image1EN;
+    [Tooltip("Imagem 2 da Rodada 3 - EN")]
+    public Sprite round3Image2EN;
 
     [Header("UI References")]
     [SerializeField] private TextMeshProUGUI headerText;
-    [SerializeField] private Image singleImageDisplay;
-    [SerializeField] private CanvasGroup singleImageCanvasGroup;
+    [SerializeField] private Image singleImageDisplay; // DEPRECATED: Não é mais usado no novo fluxo
+    [SerializeField] private CanvasGroup singleImageCanvasGroup; // DEPRECATED: Não é mais usado no novo fluxo
+    [SerializeField] private RectTransform imagesHorizontalLayoutGroup; // Transform do HorizontalLayoutGroup que contém as imagens
+    [SerializeField] private GameObject imageDisplay1GO; // GameObject da primeira imagem (dentro do HorizontalLayoutGroup)
     [SerializeField] private Image imageDisplay1;
     [SerializeField] private CanvasGroup imageDisplay1CanvasGroup;
+    [SerializeField] private GameObject imageDisplay2GO; // GameObject da segunda imagem (dentro do HorizontalLayoutGroup)
     [SerializeField] private Image imageDisplay2;
     [SerializeField] private CanvasGroup imageDisplay2CanvasGroup;
     [SerializeField] private TextMeshProUGUI descriptionText;
@@ -90,7 +128,7 @@ public class ScreenGame : CanvasScreen
     [SerializeField] private CanvasFadeIn wordsContainerFadeIn; // Componente para fazer fade in do container de palavras
     [SerializeField] private Button wordButtonPrefab;
     [SerializeField] private Button confirmButton;
-    [SerializeField] private Button skipWaitButton; // Botão para pular os 10 segundos de espera
+    [SerializeField] private Button skipWaitButton; // DEPRECATED: Não é mais usado no novo fluxo de 4 fases
     [SerializeField] private TextMeshProUGUI feedbackText;
     [Header("Word Cloud Summary References")]
     [SerializeField] private CanvasGroup inRoundCanvasGroup;
@@ -102,9 +140,9 @@ public class ScreenGame : CanvasScreen
 
     [Header("Screen Settings")]
     [SerializeField] private string resultScreenName = "results";
-    [SerializeField] private float imageTransitionDelay = 10f;
+    [SerializeField] private float imageTransitionDelay = 10f; // DEPRECATED: Não é mais usado no novo fluxo
     [SerializeField] private float fadeDuration = 1f;
-    [SerializeField] private string questionDescription = "Qual sua opinião sobre isso?";
+    [SerializeField] private string questionDescription = "Qual sua opinião sobre isso?"; // DEPRECATED
 
     // [Header("Situações das Rodadas")] // DEPRECATED: Agora usa LocalizedText
     // [TextArea(3, 5)]
@@ -124,26 +162,152 @@ public class ScreenGame : CanvasScreen
 
     #region Private Fields
 
+    /// <summary>
+    /// Enum para controlar as fases do jogo.
+    /// </summary>
+    private enum GamePhase
+    {
+        Phase1_Introduction,    // Fase 1: Imagem + texto + botão "Avançar"
+        Phase2_FirstChoice,     // Fase 2: Primeira imagem + botões de escolha + botão "Confirmar"
+        Phase3_ReviewChoice,    // Fase 3: Duas imagens + botões (re-seleção) + botão "Continuar"
+        Phase4_Results          // Fase 4: Resultados (nuvem de palavras + texto explicativo)
+    }
+
     private int currentRoundIndex = 0;
     private int totalEmpatheticScore = 0;
     private List<Button> currentWordButtons = new List<Button>();
     private List<bool> selectedWords = new List<bool>();
     private List<string> currentRoundSelectedWords = new List<string>(); // Palavras selecionadas na rodada atual
-    private bool isAwaitingSummaryContinue = false;
+    private GamePhase currentPhase = GamePhase.Phase1_Introduction;
     private List<WordData> currentRoundWordData = new List<WordData>(); // Dados da rodada atual
-    private bool skipWaitRequested = false; // Flag para indicar que o usuário pulou a espera
 
     #endregion
 
     #region Unity Callbacks
 
+    private void Start()
+    {
+        // Garante inscrição no evento de idioma após LanguageManager estar pronto
+        StartCoroutine(EnsureLanguageManagerSubscription());
+    }
+
     public override void OnEnable()
     {
         base.OnEnable();
 
+        // Subscreve ao evento de mudança de idioma
+        if (LanguageManager.Instance != null)
+        {
+            Debug.Log("[Problema2][OnEnable] Subscribing to OnLanguageChanged event");
+            LanguageManager.Instance.OnLanguageChanged += OnLanguageChanged;
+            Debug.Log("[Problema2][OnEnable] Subscribed successfully to OnLanguageChanged");
+        }
+        else
+        {
+            Debug.LogWarning("[Problema2][OnEnable] LanguageManager.Instance is NULL! Cannot subscribe to OnLanguageChanged");
+        }
+
         // Reinicia o jogo quando a tela é ativada
         // Usa corrotina para garantir que WordCloudDisplay.Instance já foi inicializado
         StartCoroutine(ResetGameDelayed());
+    }
+
+    public override void OnDisable()
+    {
+        base.OnDisable();
+
+        // Desinscreve do evento de mudança de idioma
+        if (LanguageManager.Instance != null)
+        {
+            Debug.Log("[Problema2][OnDisable] Unsubscribing from OnLanguageChanged event");
+            LanguageManager.Instance.OnLanguageChanged -= OnLanguageChanged;
+            Debug.Log("[Problema2][OnDisable] Unsubscribed from OnLanguageChanged");
+        }
+    }
+
+    /// <summary>
+    /// Corrotina que aguarda o LanguageManager estar pronto e se inscreve no evento.
+    /// </summary>
+    private IEnumerator EnsureLanguageManagerSubscription()
+    {
+        Debug.Log("[Problema2][EnsureLanguageManagerSubscription] Waiting for LanguageManager...");
+
+        // Aguarda até que LanguageManager esteja disponível
+        while (LanguageManager.Instance == null)
+        {
+            yield return null;
+        }
+
+        Debug.Log("[Problema2][EnsureLanguageManagerSubscription] LanguageManager found! Subscribing to OnLanguageChanged");
+
+        // Remove primeiro para evitar duplicação
+        LanguageManager.Instance.OnLanguageChanged -= OnLanguageChanged;
+        // Inscreve no evento
+        LanguageManager.Instance.OnLanguageChanged += OnLanguageChanged;
+
+        Debug.Log("[Problema2][EnsureLanguageManagerSubscription] Successfully subscribed to OnLanguageChanged");
+    }
+
+    /// <summary>
+    /// Chamado quando o idioma é alterado. Atualiza as imagens da rodada atual.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        Debug.Log($"[Problema2][OnLanguageChanged] ===== EVENTO DISPARADO ===== Current phase: {currentPhase}, Current round: {currentRoundIndex}");
+        Debug.Log($"[Problema2][OnLanguageChanged] New language: {(LanguageManager.Instance != null ? LanguageManager.Instance.CurrentLanguage.ToString() : "NULL")}");
+
+        // Só atualiza se estiver em uma fase que mostra imagens
+        if (currentPhase == GamePhase.Phase1_Introduction ||
+            currentPhase == GamePhase.Phase2_FirstChoice ||
+            currentPhase == GamePhase.Phase3_ReviewChoice)
+        {
+            Debug.Log("[Problema2][OnLanguageChanged] Phase matches, calling RefreshCurrentRoundImages");
+            RefreshCurrentRoundImages();
+        }
+        else
+        {
+            Debug.Log($"[Problema2][OnLanguageChanged] Phase does NOT match (current: {currentPhase}), skipping image refresh");
+        }
+    }
+
+    /// <summary>
+    /// Atualiza as imagens da rodada atual baseado no idioma.
+    /// </summary>
+    private void RefreshCurrentRoundImages()
+    {
+        Debug.Log($"[Problema2][RefreshCurrentRoundImages] ===== STARTING REFRESH ===== Round: {currentRoundIndex}");
+        Debug.Log($"[Problema2][RefreshCurrentRoundImages] Current language: {(LanguageManager.Instance != null ? LanguageManager.Instance.CurrentLanguage.ToString() : "NULL")}");
+
+        Sprite image1 = GetImage1ForRound(currentRoundIndex);
+        Sprite image2 = GetImage2ForRound(currentRoundIndex);
+
+        Debug.Log($"[Problema2][RefreshCurrentRoundImages] Retrieved sprites - Image1: {(image1 != null ? image1.name : "NULL")}, Image2: {(image2 != null ? image2.name : "NULL")}");
+
+        // Atualiza a primeira imagem se estiver ativa
+        if (imageDisplay1 != null && imageDisplay1GO != null && imageDisplay1GO.activeSelf)
+        {
+            Debug.Log($"[Problema2][RefreshCurrentRoundImages] BEFORE update - Image1 current sprite: {(imageDisplay1.sprite != null ? imageDisplay1.sprite.name : "NULL")}");
+            imageDisplay1.sprite = image1;
+            Debug.Log($"[Problema2][RefreshCurrentRoundImages] AFTER update - Image1 new sprite: {(imageDisplay1.sprite != null ? imageDisplay1.sprite.name : "NULL")}");
+        }
+        else
+        {
+            Debug.Log($"[Problema2][RefreshCurrentRoundImages] Image1 NOT updated - Display1: {(imageDisplay1 != null)}, GO1: {(imageDisplay1GO != null)}, Active: {(imageDisplay1GO != null && imageDisplay1GO.activeSelf)}");
+        }
+
+        // Atualiza a segunda imagem se estiver ativa
+        if (imageDisplay2 != null && imageDisplay2GO != null && imageDisplay2GO.activeSelf)
+        {
+            Debug.Log($"[Problema2][RefreshCurrentRoundImages] BEFORE update - Image2 current sprite: {(imageDisplay2.sprite != null ? imageDisplay2.sprite.name : "NULL")}");
+            imageDisplay2.sprite = image2;
+            Debug.Log($"[Problema2][RefreshCurrentRoundImages] AFTER update - Image2 new sprite: {(imageDisplay2.sprite != null ? imageDisplay2.sprite.name : "NULL")}");
+        }
+        else
+        {
+            Debug.Log($"[Problema2][RefreshCurrentRoundImages] Image2 NOT updated - Display2: {(imageDisplay2 != null)}, GO2: {(imageDisplay2GO != null)}, Active: {(imageDisplay2GO != null && imageDisplay2GO.activeSelf)}");
+        }
+
+        Debug.Log($"[Problema2][RefreshCurrentRoundImages] ===== REFRESH COMPLETED =====");
     }
 
     /// <summary>
@@ -163,6 +327,21 @@ public class ScreenGame : CanvasScreen
         if (WordCloudDisplay.Instance == null)
         {
             Debug.LogError("[ScreenGame] WordCloudDisplay.Instance ainda é nulo após aguardar! Verifique se o GameObject com WordCloudDisplay está na cena.");
+        }
+
+        // IMPORTANTE: Garante que estamos inscritos no evento de mudança de idioma
+        // (pode ser que OnEnable tenha executado antes do LanguageManager estar pronto)
+        if (LanguageManager.Instance != null)
+        {
+            Debug.Log("[Problema2][ResetGameDelayed] RE-Subscribing to OnLanguageChanged (safety check)");
+            // Remove primeiro para evitar subscrição dupla
+            LanguageManager.Instance.OnLanguageChanged -= OnLanguageChanged;
+            LanguageManager.Instance.OnLanguageChanged += OnLanguageChanged;
+            Debug.Log("[Problema2][ResetGameDelayed] Successfully RE-subscribed to OnLanguageChanged");
+        }
+        else
+        {
+            Debug.LogWarning("[Problema2][ResetGameDelayed] LanguageManager.Instance is STILL NULL!");
         }
 
         // Agora pode chamar ResetGame com segurança
@@ -186,7 +365,7 @@ public class ScreenGame : CanvasScreen
 
         currentRoundIndex = 0;
         totalEmpatheticScore = 0;
-        isAwaitingSummaryContinue = false;
+        currentPhase = GamePhase.Phase1_Introduction;
 
         // Limpa a UI
         ClearWordButtons();
@@ -213,26 +392,24 @@ public class ScreenGame : CanvasScreen
         }
 
         // Reseta os displays de imagem
-        if (singleImageDisplay != null)
+        if (imageDisplay1GO != null)
         {
-            singleImageDisplay.sprite = null;
-            singleImageDisplay.gameObject.SetActive(false);
+            imageDisplay1GO.SetActive(false);
         }
-        if (singleImageCanvasGroup != null)
-            singleImageCanvasGroup.alpha = 0f;
-
         if (imageDisplay1 != null)
         {
             imageDisplay1.sprite = null;
-            imageDisplay1.gameObject.SetActive(false);
         }
         if (imageDisplay1CanvasGroup != null)
             imageDisplay1CanvasGroup.alpha = 0f;
 
+        if (imageDisplay2GO != null)
+        {
+            imageDisplay2GO.SetActive(false);
+        }
         if (imageDisplay2 != null)
         {
             imageDisplay2.sprite = null;
-            imageDisplay2.gameObject.SetActive(false);
         }
         if (imageDisplay2CanvasGroup != null)
             imageDisplay2CanvasGroup.alpha = 0f;
@@ -264,7 +441,7 @@ public class ScreenGame : CanvasScreen
         }
 
         RoundData currentRound = gameRounds[roundIndex];
-        isAwaitingSummaryContinue = false;
+        currentPhase = GamePhase.Phase1_Introduction;
 
         // Limpa botões selecionados do round anterior (se houver)
         ClearSelectedWordsButtons();
@@ -272,21 +449,18 @@ public class ScreenGame : CanvasScreen
         // Carrega os dados salvos da rodada ou cria dados padrão
         LoadRoundWordData(roundIndex, currentRound);
 
-        // Configura o botão de pular
-        if (skipWaitButton != null)
-        {
-            skipWaitButton.onClick.RemoveAllListeners();
-            skipWaitButton.onClick.AddListener(OnSkipWaitButtonPressed);
-        }
-
         // Esconde as palavras e botão de confirmar inicialmente
         if (wordsContainer != null)
             wordsContainer.gameObject.SetActive(false);
         if (confirmButton != null)
         {
             confirmButton.gameObject.SetActive(false);
-            confirmButton.interactable = false; // Inicia desabilitado até que uma palavra seja selecionada
+            confirmButton.interactable = false;
         }
+
+        // Esconde o botão de pular (não é mais usado)
+        if (skipWaitButton != null)
+            skipWaitButton.gameObject.SetActive(false);
 
         // Limpa o texto de feedback
         if (feedbackText != null)
@@ -302,42 +476,53 @@ public class ScreenGame : CanvasScreen
             Debug.Log($"[ScreenGame] Header resetado para: Situação {roundNumber}");
         }
 
-        // Inicia a sequência de imagens
-        StartCoroutine(RoundImageSequence(roundIndex, currentRound));
+        // Inicia a Fase 1: Introdução
+        StartCoroutine(Phase1_ShowIntroduction(roundIndex, currentRound));
     }
 
     /// <summary>
-    /// Corrotina para gerenciar a sequência de imagens de uma rodada.
-    /// FASE 1: Mostra primeira imagem + texto de intro por 10 segundos
-    /// FASE 2: Mostra duas imagens lado a lado + botões de escolha
+    /// FASE 1: Mostra primeira imagem + texto de introdução + botão "Avançar".
+    /// O usuário deve clicar em "Avançar" para ir para a Fase 2.
     /// </summary>
-    private IEnumerator RoundImageSequence(int roundIndex, RoundData roundData)
+    private IEnumerator Phase1_ShowIntroduction(int roundIndex, RoundData roundData)
     {
-        // IMPORTANTE: Aguarda até que a tela esteja realmente ativa antes de começar qualquer animação
+        // Aguarda até que a tela esteja ativa
         while (!IsOn())
         {
             yield return null;
         }
 
         Sprite image1 = GetImage1ForRound(roundIndex);
-        Sprite image2 = GetImage2ForRound(roundIndex);
 
-        // ===== FASE 1: Primeira imagem sozinha + texto de introdução =====
-
-        // Reseta a flag de pular
-        skipWaitRequested = false;
-
-        // Desativa o texto explicativo da nuvem de palavras (só aparece na Phase 3)
+        // Desativa o texto explicativo da nuvem de palavras
         if (summaryLocalizedText != null)
         {
             summaryLocalizedText.gameObject.SetActive(false);
         }
 
-        // Mostra primeira imagem sozinha
-        if (singleImageDisplay != null && image1 != null)
+        // Ativa apenas a primeira imagem (segunda imagem fica desativada)
+        if (imageDisplay1GO != null)
         {
-            singleImageDisplay.sprite = image1;
-            singleImageDisplay.gameObject.SetActive(true);
+            imageDisplay1GO.SetActive(true);
+        }
+        if (imageDisplay2GO != null)
+        {
+            imageDisplay2GO.SetActive(false);
+        }
+
+        // Força o rebuild do layout após ativar/desativar GameObjects
+        ForceRebuildLayout(imagesHorizontalLayoutGroup);
+
+        // Define a sprite da primeira imagem
+        if (imageDisplay1 != null && image1 != null)
+        {
+            imageDisplay1.sprite = image1;
+        }
+
+        // Font size é sempre 35 (removido ajuste dinâmico)
+        if (descriptionText != null)
+        {
+            descriptionText.fontSizeMax = 35f;
         }
 
         // Atualiza o header com o número da situação
@@ -348,75 +533,53 @@ public class ScreenGame : CanvasScreen
             localizedTextHeader.SetFormatVariables(roundNumber.ToString());
         }
 
-        // Atualiza a descrição da situação (texto de introdução)
+        // Atualiza a descrição da situação
         UpdateSituationDescription(roundIndex);
 
         // Fade in da primeira imagem E do texto de descrição simultaneamente
-        if (singleImageCanvasGroup != null && descriptionCanvasGroup != null)
+        if (imageDisplay1CanvasGroup != null && descriptionCanvasGroup != null)
         {
             StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 0f, 1f, fadeDuration));
-            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 0f, 1f, fadeDuration));
+            yield return StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
         }
-        else if (singleImageCanvasGroup != null)
+        else if (imageDisplay1CanvasGroup != null)
         {
-            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 0f, 1f, fadeDuration));
+            yield return StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
         }
 
-        // Mostra o botão de pular após o fade in
-        if (skipWaitButton != null)
+        // Mostra o botão "Avançar" (sempre habilitado na Fase 1)
+        if (confirmButton != null)
         {
-            skipWaitButton.gameObject.SetActive(true);
+            confirmButton.gameObject.SetActive(true);
+            confirmButton.interactable = true;
+            // TODO: Criar key para "Avançar" - por enquanto usa "botao2" (Continuar)
+            UpdateConfirmButtonLabel(false); // false = "Continuar" (temporário, deveria ser "Avançar")
+            Debug.Log("[Phase1] Botão 'Avançar' ativado");
+        }
+    }
+
+    /// <summary>
+    /// FASE 2: Troca o texto de descrição para a pergunta da Fase 2, mantém primeira imagem, mostra botões de escolha.
+    /// Botão "Confirmar" aparece mas só habilita quando pelo menos 1 palavra for selecionada.
+    /// </summary>
+    private IEnumerator Phase2_ShowFirstChoice(int roundIndex, RoundData roundData)
+    {
+        currentPhase = GamePhase.Phase2_FirstChoice;
+        Debug.Log("[Phase2] Iniciando fase de primeira escolha");
+
+        // Atualiza a descrição para a pergunta da Fase 2
+        if (descriptionLocalizedText != null)
+        {
+            Debug.Log("[Phase2] BEFORE SetLocalizationKey - current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
+            descriptionLocalizedText.SetLocalizationKey("common", "phase2Description");
+            Debug.Log("[Phase2] AFTER SetLocalizationKey - new text should be: " + (descriptionText != null ? descriptionText.text : "NULL"));
+        }
+        else
+        {
+            Debug.LogError("[Phase2] descriptionLocalizedText is NULL!");
         }
 
-        // Aguarda 10 segundos mostrando a primeira imagem e o texto de introdução
-        // Mas permite pular se o usuário clicar no botão
-        float elapsedTime = 0f;
-        while (elapsedTime < imageTransitionDelay && !skipWaitRequested)
-        {
-            elapsedTime += Time.deltaTime;
-            yield return null;
-        }
-
-        // Esconde o botão de pular
-        if (skipWaitButton != null)
-        {
-            skipWaitButton.gameObject.SetActive(false);
-        }
-
-        // ===== FASE 2: Duas imagens lado a lado + botões =====
-
-        // Esconde a imagem única E o texto de descrição simultaneamente
-        if (singleImageCanvasGroup != null && descriptionCanvasGroup != null)
-        {
-            StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
-            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
-            singleImageDisplay.gameObject.SetActive(false);
-        }
-        else if (singleImageCanvasGroup != null)
-        {
-            yield return StartCoroutine(FadeCanvasGroup(singleImageCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
-            singleImageDisplay.gameObject.SetActive(false);
-        }
-
-        // Prepara as duas imagens lado a lado
-        if (imageDisplay1 != null && image1 != null)
-        {
-            imageDisplay1.sprite = image1;
-            imageDisplay1.gameObject.SetActive(true);
-        }
-
-        if (imageDisplay2 != null && image2 != null)
-        {
-            imageDisplay2.sprite = image2;
-            imageDisplay2.gameObject.SetActive(true);
-        }
-
-        // Fade in das duas imagens simultaneamente
-        if (imageDisplay1CanvasGroup != null && imageDisplay2CanvasGroup != null)
-        {
-            StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
-            yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 0f, 1f, fadeDuration));
-        }
+        // Mantém a primeira imagem visível
 
         // Cria os botões de palavras
         CreateWordButtons(roundData.words);
@@ -430,21 +593,78 @@ public class ScreenGame : CanvasScreen
             yield return null;
         }
 
-        // Faz o fade in do container de palavras (se tiver)
+        // Faz o fade in do container de palavras
         if (wordsContainerFadeIn != null)
         {
             wordsContainerFadeIn.DoFadeIn();
         }
 
-        // Nota: A animação dos botões é feita pelo AnimateButtonsAfterDelay()
-        // que já foi iniciado pelo CreateWordButtons()
-
+        // Mostra o botão "Confirmar" (desabilitado até que uma palavra seja selecionada)
         if (confirmButton != null)
         {
             confirmButton.gameObject.SetActive(true);
-            confirmButton.interactable = false; // Inicia desabilitado até que uma palavra seja selecionada
+            confirmButton.interactable = false;
             UpdateConfirmButtonLabel(true); // true = "Confirmar"
-            Debug.Log("Botão de confirmar ativado (mas desabilitado até seleção)");
+            Debug.Log("[Phase2] Botão 'Confirmar' ativado (mas desabilitado até seleção)");
+        }
+    }
+
+    /// <summary>
+    /// FASE 3: Ativa segunda imagem, mostra duas imagens lado a lado, troca texto para pergunta da Fase 3 e permite re-seleção.
+    /// Botão "Continuar" sempre habilitado (pois já houve confirmação anterior).
+    /// </summary>
+    private IEnumerator Phase3_ShowReviewChoice(int roundIndex, RoundData roundData)
+    {
+        currentPhase = GamePhase.Phase3_ReviewChoice;
+        Debug.Log("[Phase3] Iniciando fase de revisão de escolha");
+
+        Sprite image2 = GetImage2ForRound(roundIndex);
+
+        // Atualiza a descrição para a pergunta da Fase 3
+        if (descriptionLocalizedText != null)
+        {
+            Debug.Log("[Phase3] BEFORE SetLocalizationKey - current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
+            descriptionLocalizedText.SetLocalizationKey("common", "phase3Description");
+            Debug.Log("[Phase3] AFTER SetLocalizationKey - new text should be: " + (descriptionText != null ? descriptionText.text : "NULL"));
+        }
+        else
+        {
+            Debug.LogError("[Phase3] descriptionLocalizedText is NULL!");
+        }
+
+        // Ativa a segunda imagem (primeira já está ativa desde a Fase 1)
+        if (imageDisplay2GO != null)
+        {
+            imageDisplay2GO.SetActive(true);
+        }
+
+        // Força o rebuild do layout após ativar a segunda imagem
+        ForceRebuildLayout(imagesHorizontalLayoutGroup);
+
+        // Define a sprite da segunda imagem
+        if (imageDisplay2 != null && image2 != null)
+        {
+            imageDisplay2.sprite = image2;
+        }
+
+        // Fade in da segunda imagem (primeira já está visível)
+        if (imageDisplay2CanvasGroup != null)
+        {
+            yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 0f, 1f, fadeDuration));
+        }
+
+        // Os botões de palavras já estão criados, apenas garantimos que estão visíveis e interativos
+        if (wordsContainer != null)
+        {
+            wordsContainer.gameObject.SetActive(true);
+        }
+
+        // Atualiza o botão para "Continuar" (sempre habilitado pois já teve confirmação)
+        if (confirmButton != null)
+        {
+            confirmButton.interactable = true;
+            UpdateConfirmButtonLabel(false); // false = "Continuar"
+            Debug.Log("[Phase3] Botão 'Continuar' ativado");
         }
     }
 
@@ -469,6 +689,21 @@ public class ScreenGame : CanvasScreen
         }
 
         canvasGroup.alpha = endAlpha;
+    }
+
+    /// <summary>
+    /// Força a atualização do layout de um Transform e seus filhos.
+    /// Útil quando GameObjects são ativados/desativados em um LayoutGroup.
+    /// </summary>
+    /// <param name="transform">Transform pai que contém o LayoutGroup</param>
+    private void ForceRebuildLayout(Transform transform)
+    {
+        if (transform == null) return;
+
+        // Força o rebuild imediato do layout
+        UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+
+        Debug.Log($"[ForceRebuildLayout] Layout reconstruído para: {transform.name}");
     }
 
     /// <summary>
@@ -571,10 +806,16 @@ public class ScreenGame : CanvasScreen
             if (selectedWords[wordIndex])
             {
                 colors.normalColor = Color.green;
+                colors.highlightedColor = Color.green;
+                colors.pressedColor = Color.green;
+                colors.selectedColor = Color.green;
             }
             else
             {
                 colors.normalColor = Color.white;
+                colors.highlightedColor = Color.white;
+                colors.pressedColor = Color.white;
+                colors.selectedColor = Color.white;
             }
 
             button.colors = colors;
@@ -585,18 +826,37 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Atualiza o estado do botão de confirmar baseado nas seleções.
-    /// O botão só fica habilitado se pelo menos 1 palavra foi selecionada.
+    /// Atualiza o estado do botão de confirmar baseado nas seleções e na fase atual.
+    /// Fase 1: Sempre habilitado (botão "Avançar")
+    /// Fase 2: Só habilita se pelo menos 1 palavra foi selecionada (botão "Confirmar")
+    /// Fase 3: Sempre habilitado (botão "Continuar", permite re-seleção)
+    /// Fase 4: Sempre habilitado (botão "Avançar" para próximo round)
     /// </summary>
     private void UpdateConfirmButtonState()
     {
-        if (confirmButton == null || isAwaitingSummaryContinue)
+        if (confirmButton == null)
             return;
 
-        bool hasSelection = HasAnyWordSelected();
-        confirmButton.interactable = hasSelection;
+        switch (currentPhase)
+        {
+            case GamePhase.Phase1_Introduction:
+                confirmButton.interactable = true; // Sempre habilitado
+                break;
 
-        Debug.Log($"[UpdateConfirmButtonState] Botão de confirmar {(hasSelection ? "habilitado" : "desabilitado")}");
+            case GamePhase.Phase2_FirstChoice:
+                bool hasSelection = HasAnyWordSelected();
+                confirmButton.interactable = hasSelection;
+                Debug.Log($"[UpdateConfirmButtonState Phase2] Botão {(hasSelection ? "habilitado" : "desabilitado")}");
+                break;
+
+            case GamePhase.Phase3_ReviewChoice:
+                confirmButton.interactable = true; // Sempre habilitado (já teve confirmação)
+                break;
+
+            case GamePhase.Phase4_Results:
+                confirmButton.interactable = true; // Sempre habilitado
+                break;
+        }
     }
 
     /// <summary>
@@ -631,34 +891,51 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Método público chamado pelo botão principal. Controla fases de confirmação e resumo.
-    /// NOTA: O botão só fica habilitado se pelo menos 1 palavra foi selecionada (ver UpdateConfirmButtonState).
+    /// Método público chamado pelo botão principal. Controla as 4 fases do jogo.
+    /// Fase 1: Botão "Avançar" -> vai para Fase 2
+    /// Fase 2: Botão "Confirmar" -> vai para Fase 3 (requer pelo menos 1 palavra selecionada)
+    /// Fase 3: Botão "Continuar" -> processa escolhas e vai para Fase 4
+    /// Fase 4: Botão "Avançar" -> vai para próximo round ou tela de resultados
     /// </summary>
     public void OnConfirmButtonPressed()
     {
-        if (isAwaitingSummaryContinue)
+        Debug.Log($"[OnConfirmButtonPressed] Fase atual: {currentPhase}");
+
+        switch (currentPhase)
         {
-            HandleSummaryContinue();
-        }
-        else
-        {
-            ConfirmChoices();
+            case GamePhase.Phase1_Introduction:
+                // Fase 1: Avançar para mostrar os botões de escolha
+                StartCoroutine(Phase2_ShowFirstChoice(currentRoundIndex, gameRounds[currentRoundIndex]));
+                break;
+
+            case GamePhase.Phase2_FirstChoice:
+                // Fase 2: Confirmar escolha e mostrar segunda imagem
+                if (HasAnyWordSelected())
+                {
+                    StartCoroutine(Phase3_ShowReviewChoice(currentRoundIndex, gameRounds[currentRoundIndex]));
+                }
+                else
+                {
+                    Debug.LogWarning("[Phase2] Nenhuma palavra selecionada!");
+                }
+                break;
+
+            case GamePhase.Phase3_ReviewChoice:
+                // Fase 3: Continuar para processar escolhas e mostrar resultados
+                ProcessChoicesAndShowResults();
+                break;
+
+            case GamePhase.Phase4_Results:
+                // Fase 4: Avançar para próximo round ou tela final
+                HandleResultsContinue();
+                break;
         }
     }
 
     /// <summary>
-    /// Método público chamado pelo botão de pular espera.
-    /// Pula os 10 segundos de espera inicial da rodada.
+    /// Processa as escolhas da rodada atual e mostra os resultados.
     /// </summary>
-    public void OnSkipWaitButtonPressed()
-    {
-        skipWaitRequested = true;
-    }
-
-    /// <summary>
-    /// Processa as escolhas da rodada atual.
-    /// </summary>
-    private void ConfirmChoices()
+    private void ProcessChoicesAndShowResults()
     {
         Debug.Log($"ConfirmChoices chamado - Rodada atual: {currentRoundIndex}, Total de rodadas: {gameRounds.Count}");
 
@@ -728,19 +1005,28 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Corrotina para esconder as imagens e mostrar a nuvem de palavras.
-    /// FASE 3: Esconde imagens, mostra nuvem de palavras + texto explicativo
+    /// Corrotina para esconder as imagens e o texto de descrição, e mostrar a nuvem de palavras.
+    /// FASE 4: Esconde imagens + texto de descrição, mostra nuvem de palavras + texto explicativo
     /// </summary>
     private IEnumerator ShowWordCloudSummary()
     {
+        // Esconde o texto de descrição com fade out
+        if (descriptionCanvasGroup != null)
+        {
+            StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 1f, 0f, fadeDuration * 0.5f));
+        }
+
         // Esconde as duas imagens com fade out
         if (imageDisplay1CanvasGroup != null && imageDisplay2CanvasGroup != null)
         {
             StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 1f, 0f, fadeDuration * 0.5f));
             yield return StartCoroutine(FadeCanvasGroup(imageDisplay2CanvasGroup, 1f, 0f, fadeDuration * 0.5f));
 
-            imageDisplay1.gameObject.SetActive(false);
-            imageDisplay2.gameObject.SetActive(false);
+            // Desativa os GameObjects após o fade out
+            if (imageDisplay1GO != null)
+                imageDisplay1GO.SetActive(false);
+            if (imageDisplay2GO != null)
+                imageDisplay2GO.SetActive(false);
         }
 
         // Muda o header para "Resultados"
@@ -1041,29 +1327,26 @@ public class ScreenGame : CanvasScreen
     /// </summary>
     private void ResetImagesForNewRound()
     {
-        // Reseta a imagem única
-        if (singleImageDisplay != null)
-        {
-            singleImageDisplay.sprite = null;
-            singleImageDisplay.gameObject.SetActive(false);
-        }
-        if (singleImageCanvasGroup != null)
-            singleImageCanvasGroup.alpha = 0f;
-
         // Reseta a primeira imagem
+        if (imageDisplay1GO != null)
+        {
+            imageDisplay1GO.SetActive(false);
+        }
         if (imageDisplay1 != null)
         {
             imageDisplay1.sprite = null;
-            imageDisplay1.gameObject.SetActive(false);
         }
         if (imageDisplay1CanvasGroup != null)
             imageDisplay1CanvasGroup.alpha = 0f;
 
         // Reseta a segunda imagem
+        if (imageDisplay2GO != null)
+        {
+            imageDisplay2GO.SetActive(false);
+        }
         if (imageDisplay2 != null)
         {
             imageDisplay2.sprite = null;
-            imageDisplay2.gameObject.SetActive(false);
         }
         if (imageDisplay2CanvasGroup != null)
             imageDisplay2CanvasGroup.alpha = 0f;
@@ -1123,7 +1406,8 @@ public class ScreenGame : CanvasScreen
     /// </summary>
     private void ShowRoundSummary()
     {
-        isAwaitingSummaryContinue = true;
+        currentPhase = GamePhase.Phase4_Results;
+        Debug.Log("[Phase4] Mostrando resultados");
 
         // Mantém as imagens visíveis, só esconde os botões de palavra
         // Esconde todos os botões de palavra
@@ -1161,11 +1445,12 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Trata o clique no botão enquanto o resumo está visível.
+    /// Trata o clique no botão enquanto os resultados estão visíveis (Fase 4).
+    /// Avança para o próximo round ou vai para a tela final.
     /// </summary>
-    private void HandleSummaryContinue()
+    private void HandleResultsContinue()
     {
-        isAwaitingSummaryContinue = false;
+        Debug.Log("[Phase4] Avançando para próximo round");
 
         if (wordCloudSummaryCanvasGroup != null)
         {
@@ -1178,10 +1463,9 @@ public class ScreenGame : CanvasScreen
         if (confirmButton != null)
         {
             confirmButton.interactable = false;
-            UpdateConfirmButtonLabel(true); // true = "Confirmar"
         }
 
-        // Retorna ao fluxo normal
+        // Avança para o próximo round
         StartCoroutine(AdvanceToNextRound());
     }
 
@@ -1197,55 +1481,100 @@ public class ScreenGame : CanvasScreen
             return;
         }
 
+        Debug.Log($"[UpdateSituationDescription] BEFORE - Round {roundIndex}, current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
+
         switch (roundIndex)
         {
             case 0:
                 descriptionLocalizedText.SetLocalizationKey("situation1", "descricao1");
+                Debug.Log("[UpdateSituationDescription] Set to situation1.descricao1");
                 break;
             case 1:
                 descriptionLocalizedText.SetLocalizationKey("situation2", "descricao1");
+                Debug.Log("[UpdateSituationDescription] Set to situation2.descricao1");
                 break;
             case 2:
                 descriptionLocalizedText.SetLocalizationKey("situation3", "descricao1");
+                Debug.Log("[UpdateSituationDescription] Set to situation3.descricao1");
                 break;
             default:
                 Debug.LogError($"Índice de rodada inválido: {roundIndex}");
                 break;
         }
+
+        Debug.Log($"[UpdateSituationDescription] AFTER - new text: " + (descriptionText != null ? descriptionText.text : "NULL"));
     }
 
     /// <summary>
-    /// Retorna a primeira imagem da rodada especificada.
+    /// Retorna a primeira imagem da rodada especificada baseada no idioma atual.
     /// </summary>
     /// <param name="roundIndex">Índice da rodada (0-2)</param>
     /// <returns>Sprite da primeira imagem da rodada</returns>
     private Sprite GetImage1ForRound(int roundIndex)
     {
+        // Se LanguageManager for null, assume Português como padrão
+        bool isPortuguese = LanguageManager.Instance == null ||
+                           LanguageManager.Instance.CurrentLanguage == Language.Portuguese;
+
+        Debug.Log($"[Problema2][GetImage1ForRound] Round {roundIndex}, Language: {(LanguageManager.Instance != null ? LanguageManager.Instance.CurrentLanguage.ToString() : "NULL (default PT)")}, isPortuguese: {isPortuguese}");
+
+        Sprite selectedSprite = null;
         switch (roundIndex)
         {
-            case 0: return round1Image1;
-            case 1: return round2Image1;
-            case 2: return round3Image1;
+            case 0:
+                selectedSprite = isPortuguese ? round1Image1PT : round1Image1EN;
+                Debug.Log($"[Problema2][GetImage1ForRound] Round 0 - PT sprite: {(round1Image1PT != null ? round1Image1PT.name : "NULL")}, EN sprite: {(round1Image1EN != null ? round1Image1EN.name : "NULL")}");
+                Debug.Log($"[Problema2][GetImage1ForRound] Round 0 - Selected: {(isPortuguese ? "PT" : "EN")}, Returning sprite: {(selectedSprite != null ? selectedSprite.name : "NULL")}");
+                return selectedSprite;
+            case 1:
+                selectedSprite = isPortuguese ? round2Image1PT : round2Image1EN;
+                Debug.Log($"[Problema2][GetImage1ForRound] Round 1 - PT sprite: {(round2Image1PT != null ? round2Image1PT.name : "NULL")}, EN sprite: {(round2Image1EN != null ? round2Image1EN.name : "NULL")}");
+                Debug.Log($"[Problema2][GetImage1ForRound] Round 1 - Selected: {(isPortuguese ? "PT" : "EN")}, Returning sprite: {(selectedSprite != null ? selectedSprite.name : "NULL")}");
+                return selectedSprite;
+            case 2:
+                selectedSprite = isPortuguese ? round3Image1PT : round3Image1EN;
+                Debug.Log($"[Problema2][GetImage1ForRound] Round 2 - PT sprite: {(round3Image1PT != null ? round3Image1PT.name : "NULL")}, EN sprite: {(round3Image1EN != null ? round3Image1EN.name : "NULL")}");
+                Debug.Log($"[Problema2][GetImage1ForRound] Round 2 - Selected: {(isPortuguese ? "PT" : "EN")}, Returning sprite: {(selectedSprite != null ? selectedSprite.name : "NULL")}");
+                return selectedSprite;
             default:
-                Debug.LogError($"Índice de rodada inválido: {roundIndex}");
+                Debug.LogError($"[Problema2][GetImage1ForRound] Índice de rodada inválido: {roundIndex}");
                 return null;
         }
     }
 
     /// <summary>
-    /// Retorna a segunda imagem da rodada especificada.
+    /// Retorna a segunda imagem da rodada especificada baseada no idioma atual.
     /// </summary>
     /// <param name="roundIndex">Índice da rodada (0-2)</param>
     /// <returns>Sprite da segunda imagem da rodada</returns>
     private Sprite GetImage2ForRound(int roundIndex)
     {
+        // Se LanguageManager for null, assume Português como padrão
+        bool isPortuguese = LanguageManager.Instance == null ||
+                           LanguageManager.Instance.CurrentLanguage == Language.Portuguese;
+
+        Debug.Log($"[Problema2][GetImage2ForRound] Round {roundIndex}, Language: {(LanguageManager.Instance != null ? LanguageManager.Instance.CurrentLanguage.ToString() : "NULL (default PT)")}, isPortuguese: {isPortuguese}");
+
+        Sprite selectedSprite = null;
         switch (roundIndex)
         {
-            case 0: return round1Image2;
-            case 1: return round2Image2;
-            case 2: return round3Image2;
+            case 0:
+                selectedSprite = isPortuguese ? round1Image2PT : round1Image2EN;
+                Debug.Log($"[Problema2][GetImage2ForRound] Round 0 - PT sprite: {(round1Image2PT != null ? round1Image2PT.name : "NULL")}, EN sprite: {(round1Image2EN != null ? round1Image2EN.name : "NULL")}");
+                Debug.Log($"[Problema2][GetImage2ForRound] Round 0 - Selected: {(isPortuguese ? "PT" : "EN")}, Returning sprite: {(selectedSprite != null ? selectedSprite.name : "NULL")}");
+                return selectedSprite;
+            case 1:
+                selectedSprite = isPortuguese ? round2Image2PT : round2Image2EN;
+                Debug.Log($"[Problema2][GetImage2ForRound] Round 1 - PT sprite: {(round2Image2PT != null ? round2Image2PT.name : "NULL")}, EN sprite: {(round2Image2EN != null ? round2Image2EN.name : "NULL")}");
+                Debug.Log($"[Problema2][GetImage2ForRound] Round 1 - Selected: {(isPortuguese ? "PT" : "EN")}, Returning sprite: {(selectedSprite != null ? selectedSprite.name : "NULL")}");
+                return selectedSprite;
+            case 2:
+                selectedSprite = isPortuguese ? round3Image2PT : round3Image2EN;
+                Debug.Log($"[Problema2][GetImage2ForRound] Round 2 - PT sprite: {(round3Image2PT != null ? round3Image2PT.name : "NULL")}, EN sprite: {(round3Image2EN != null ? round3Image2EN.name : "NULL")}");
+                Debug.Log($"[Problema2][GetImage2ForRound] Round 2 - Selected: {(isPortuguese ? "PT" : "EN")}, Returning sprite: {(selectedSprite != null ? selectedSprite.name : "NULL")}");
+                return selectedSprite;
             default:
-                Debug.LogError($"Índice de rodada inválido: {roundIndex}");
+                Debug.LogError($"[Problema2][GetImage2ForRound] Índice de rodada inválido: {roundIndex}");
                 return null;
         }
     }

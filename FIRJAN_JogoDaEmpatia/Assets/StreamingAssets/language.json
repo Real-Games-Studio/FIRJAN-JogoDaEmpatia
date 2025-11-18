@@ -3,7 +3,11 @@
         "situationTitlePT": "Situação {0}",
         "situationTitleEN": "Situation {0}",
         "skipButtonPT": "AVANÇAR",
-        "skipButtonEN": "SKIP"
+        "skipButtonEN": "SKIP",
+        "phase2DescriptionPT": "O que passa na sua cabeça em relação a essa situação?<br><br>Clique nas palavras para selecionar",
+        "phase2DescriptionEN": "What goes through your mind regarding this situation?<br><br>Click on the words to select",
+        "phase3DescriptionPT": "Agora veja outro ponto de vista sobre a situação.<br><br>Reavalie ou não suas escolhas.",
+        "phase3DescriptionEN": "Now see another point of view about the situation.<br><br>Reevaluate your choices or not."
     },
     "cta": {
         "titulo1PT": "Jogo da<br><color=#ffa600>   empatia</color>",
@@ -76,8 +80,8 @@
     "situation_results": {
         "titulo1PT": "Resultados",
         "titulo1EN": "Results",
-        "texto1PT": "As palavras maiores foram as mais escolhidas por você e por outros participantes, revelando pontos de empatia compartilhados em comum.<br><br><br>Já as palavras menores representam escolhas menos frequentes, mas igualmente importantes, pois mostram sua visão única da situação.",
-        "texto1EN": "The larger words were the ones most chosen by you and other participants, revealing shared points of empathy.<br><br><br>The smaller words represent less frequent choices, but equally important, as they show your unique view of the situation.",
+        "texto1PT": "As palavras maiores foram as mais escolhidas por você e por outros participantes, revelando pontos de empatia compartilhados em comum.",
+        "texto1EN": "The larger words were the ones most chosen by you and other participants, revealing shared points of empathy.",
         "palavra1PT": "Adaptação",
         "palavra1EN": "Adaptation",
         "palavra2PT": "Resolução de problema",
@@ -102,10 +106,10 @@
     "game_over": {
         "titulo1PT": "RESULTADO FINAL",
         "titulo1EN": "FINAL RESULT",
-        "titulo2PT": "PARABÉNS!",
-        "titulo2EN": "CONGRATULATIONS!",
-        "texto1PT": "Candidato, empatia não resolve todos os problemas, mas ela muda a forma como você os enfrenta. Cada decisão contribuiu para fortalecer suas habilidades de empatia, escuta ativa e autoconsciência, que foram pontuadas ao longo desta experiência.<br><br>Aproxime seu cartão.",
-        "texto1EN": "Candidate, empathy doesn’t solve all problems, but it changes the way you face them. Each decision helped strengthen your skills in empathy, active listening, and self-awareness, which were scored throughout this experience.<br><br>Tap your card.",
+        "titulo2PT": "FIM DE JOGO!",
+        "titulo2EN": "END OF GAME!",
+        "texto1PT": "Candidato, empatia não resolve todos os problemas, mas ela muda a forma como você os enfrenta. Cada decisão contribuiu para fortalecer suas habilidades, que foram pontuadas ao longo desta experiência.<br><br>Aproxime seu cartão.",
+        "texto1EN": "Candidate, empathy doesn’t solve all problems, but it changes the way you face them. Each decision helped strengthen your skills, which were scored throughout this experience.<br><br>Tap your card.",
         "texto2PT": "Aproxime seu cartão.",
         "texto2EN": "Tap your card.",
         "texto3PT": "OBRIGADO!",
@@ -114,12 +118,12 @@
         "texto4EN": "Your data has been saved<br>to your profile!",
         "botaoFinalizarPT": "FINALIZAR",
         "botaoFinalizarEN": "FINISH",
-        "indicador1PT": "APRENDIZADO CONTÍNUO",
-        "indicador1EN": "CONTINUOUS LEARNING",
-        "indicador2PT": "ADAPTABILIDADE",
-        "indicador2EN": "ADAPTABILITY",
-        "indicador3PT": "RESILIÊNCIA",
-        "indicador3EN": "RESILIENCE"
+        "indicador1PT": "CURIOSIDADE E APRENDIZADO",
+        "indicador1EN": "CURIOSITY AND LEARNING",
+        "indicador2PT": "EMPATIA E ESCUTA",
+        "indicador2EN": "EMPATHY AND LISTENING",
+        "indicador3PT": "PENSAMENTO SISTÊMICO",
+        "indicador3EN": "SYSTEMIC THINKING"
     },
     "header": {
         "titulo1PT": "// JOGO DA EMPATIA",

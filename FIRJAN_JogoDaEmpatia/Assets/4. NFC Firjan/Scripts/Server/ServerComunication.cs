@@ -24,13 +24,14 @@ namespace _4._NFC_Firjan.Scripts.Server
 		private void Awake()
 		{
 			_client = new HttpClient();
+			// Define um timeout de 8 segundos para todas as requisições
+			_client.Timeout = TimeSpan.FromSeconds(8);
 		}
-
 		private string GetFullEndGameUrl(string nfcId)
 		{
 			return $"http://{Ip}:{Port}/users/{nfcId}/endgame";
 		}
-		
+
 		private string GetFullNfcUrl(string nfcId)
 		{
 			return $"http://{Ip}:{Port}/users/{nfcId}";
@@ -47,16 +48,17 @@ namespace _4._NFC_Firjan.Scripts.Server
 			var request = new HttpRequestMessage(HttpMethod.Post, url);
 			var content = new StringContent(gameInfo.ToString());
 			request.Content = content;
-			Debug.Log($"Sending to {url}:{request.Content?.ReadAsStringAsync().Result}");
-			var response = _client.SendAsync(request).Result;
-			return response.StatusCode;
-		}
 
-		/// <summary>
-		/// Usado para pegar as informações atuais do nfc
-		/// </summary>
-		/// <param name="nfcId">Nome enviado pelo <see cref="NFC.NFCReceiver"/></param>
-		/// <returns><see cref="EndGameResponseModel"></see></returns>
+			string requestBody = await request.Content.ReadAsStringAsync().ConfigureAwait(false);
+			Debug.Log($"Sending to {url}:{requestBody}");
+
+			var response = await _client.SendAsync(request).ConfigureAwait(false);
+			return response.StatusCode;
+		}       /// <summary>
+				/// Usado para pegar as informações atuais do nfc
+				/// </summary>
+				/// <param name="nfcId">Nome enviado pelo <see cref="NFC.NFCReceiver"/></param>
+				/// <returns><see cref="EndGameResponseModel"></see></returns>
 		public async Task<EndGameResponseModel> GetNfcInfo(string nfcId)
 		{
 			var url = GetFullNfcUrl(nfcId);

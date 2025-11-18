@@ -30,6 +30,7 @@ public class ScreenResult : CanvasScreen
     [SerializeField] private GameObject finishButton;             // Botão "Finalizar" que aparece após POST
 
     [Header("Localized Text References")]
+    [SerializeField] private FIRJAN.Utilities.LocalizedText finalMessageLocalizedText; // LocalizedText para mensagem final
     [SerializeField] private FIRJAN.Utilities.LocalizedText thankYouLocalizedText; // LocalizedText para "OBRIGADO!"
     [SerializeField] private FIRJAN.Utilities.LocalizedText finishButtonLocalizedText; // LocalizedText do botão Finalizar
 
@@ -123,14 +124,14 @@ public class ScreenResult : CanvasScreen
             HandleAutoRestartTimer();
         }
 
-        // DEBUG: Simula leitura de NFC e POST bem-sucedido (APENAS NO EDITOR)
-        #if UNITY_EDITOR
+        // DEBUG: Simula leitura de NFC e POST bem-sucedido
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (Input.GetKeyDown(debugNFCKey))
         {
             Debug.Log("[ScreenResult] ===DEBUG=== Tecla de debug pressionada! Simulando NFC + POST bem-sucedido");
             OnPostSuccess();
         }
-        #endif
+#endif
     }
 
     /// <summary>
@@ -272,12 +273,7 @@ public class ScreenResult : CanvasScreen
     /// </summary>
     public void OnPostSuccess()
     {
-        Debug.Log("===========================================");
         Debug.Log("[ScreenResult] === OnPostSuccess CHAMADO ===");
-        Debug.Log("===========================================");
-        Debug.Log($"[ScreenResult] Timestamp: {System.DateTime.Now:HH:mm:ss.fff}");
-        Debug.Log($"[ScreenResult] GameObject ativo? {gameObject.activeInHierarchy}");
-        Debug.Log($"[ScreenResult] Component habilitado? {enabled}");
         Debug.Log("[ScreenResult] Iniciando transição para canvas de sucesso...");
 
         // Para o timer de auto-restart quando o NFC é lido
@@ -294,9 +290,7 @@ public class ScreenResult : CanvasScreen
             Debug.LogWarning("[ScreenResult] nfcClip não configurado no Inspector!");
         }
 
-        Debug.Log("[ScreenResult] Chamando StartCoroutine(TransitionToSuccessAndExit())...");
         StartCoroutine(TransitionToSuccessAndExit());
-        Debug.Log("[ScreenResult] StartCoroutine chamado com sucesso!");
     }
 
     /// <summary>
@@ -425,11 +419,19 @@ public class ScreenResult : CanvasScreen
     /// </summary>
     private void DisplayFinalMessage()
     {
-        if (finalMessageText != null)
+        // Usa LocalizedText se configurado
+        if (finalMessageLocalizedText != null)
         {
+            finalMessageLocalizedText.SetLocalizationKey("game_over", "texto1");
+            Debug.Log("[ScreenResult] Mensagem final configurada via LocalizedText: game_over.texto1");
+        }
+        else if (finalMessageText != null)
+        {
+            // Fallback para texto hardcoded se LocalizedText não estiver configurado
             finalMessageText.text = "Candidato, Empatia não resolve todos os problemas, mas ela muda a forma como você os enfrenta. " +
                                    "Cada decisão contribuiu para fortalecer suas habilidades de Empatia, Escuta Ativa e Autoconsciência, " +
                                    "que foram pontuadas ao longo desta experiência.<br><br>Aproxime seu cartão.";
+            Debug.LogWarning("[ScreenResult] finalMessageLocalizedText não configurado, usando fallback hardcoded");
         }
     }
 
@@ -528,17 +530,14 @@ public class ScreenResult : CanvasScreen
     /// <param name="scores">Pontuações das habilidades</param>
     private void SubmitToNFCSystem(SkillScores scores)
     {
-        Debug.Log($"[ScreenResult] === SubmitToNFCSystem CHAMADO === Empathy: {scores.empathy}, ActiveListening: {scores.activeListening}, SelfAwareness: {scores.selfAwareness}");
-
         if (NFCGameService.Instance != null)
         {
-            Debug.Log("[ScreenResult] NFCGameService.Instance encontrado! Chamando SubmitGameResult...");
             NFCGameService.Instance.SubmitGameResult(scores.empathy, scores.activeListening, scores.selfAwareness);
-            Debug.Log("[ScreenResult] ✓ SubmitGameResult chamado com sucesso. Dados pendentes armazenados.");
+            Debug.Log("[ScreenResult] Dados enviados para sistema NFC");
         }
         else
         {
-            Debug.LogError("[ScreenResult] ✗ NFCGameService.Instance é NULL! Sistema NFC não está inicializado!");
+            Debug.LogWarning("[ScreenResult] NFCGameService não encontrado");
         }
     }
 
