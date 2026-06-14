@@ -1,44 +1,44 @@
 {
     "words": [
         {
-            "text": "Desleixo",
+            "text": "DESLEIXO",
+            "points": 1,
+            "cumulativePoints": 1
+        },
+        {
+            "text": "RESILIÊNCIA",
+            "points": 1,
+            "cumulativePoints": 2
+        },
+        {
+            "text": "AMADORISMO",
             "points": 1,
             "cumulativePoints": 3
         },
         {
-            "text": "Adaptação",
+            "text": "PRIORIDADE",
             "points": 1,
-            "cumulativePoints": 10
+            "cumulativePoints": 4
         },
         {
-            "text": "Resiliência",
-            "points": 1,
-            "cumulativePoints": 14
-        },
-        {
-            "text": "Falta de respeito",
+            "text": "ADAPTAÇÃO",
             "points": 1,
             "cumulativePoints": 5
         },
         {
-            "text": "Amadorismo",
+            "text": "FALTA DE RESPEITO",
             "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 6
         },
         {
-            "text": "Compromisso",
+            "text": "COMPROMISSO",
             "points": 1,
             "cumulativePoints": 7
         },
         {
-            "text": "Prioridade",
+            "text": "FALTA DE ATENÇÃO",
             "points": 1,
-            "cumulativePoints": 5
-        },
-        {
-            "text": "Falta de atenção",
-            "points": 1,
-            "cumulativePoints": 1
+            "cumulativePoints": 8
         }
     ]
 }

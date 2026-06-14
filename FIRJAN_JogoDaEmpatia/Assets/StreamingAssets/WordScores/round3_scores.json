@@ -1,44 +1,44 @@
 {
     "words": [
         {
-            "text": "Improdutividade",
-            "points": 1,
-            "cumulativePoints": 3
-        },
-        {
-            "text": "Distração",
-            "points": 1,
-            "cumulativePoints": 6
-        },
-        {
-            "text": "Resolução de problemas",
-            "points": 1,
-            "cumulativePoints": 13
-        },
-        {
-            "text": "Colaboração",
-            "points": 1,
-            "cumulativePoints": 7
-        },
-        {
-            "text": "Desorganização",
+            "text": "IMPRODUTIVIDADE",
             "points": 1,
             "cumulativePoints": 1
         },
         {
-            "text": "Descomprometimento",
+            "text": "RESOLUÇÃO DE PROBLEMAS",
+            "points": 1,
+            "cumulativePoints": 2
+        },
+        {
+            "text": "DESORGANIZAÇÃO",
+            "points": 1,
+            "cumulativePoints": 3
+        },
+        {
+            "text": "ESTRATÉGIA",
+            "points": 1,
+            "cumulativePoints": 4
+        },
+        {
+            "text": "DISTRAÇÃO",
             "points": 1,
             "cumulativePoints": 5
         },
         {
-            "text": "Estratégia",
+            "text": "COLABORAÇÃO",
+            "points": 1,
+            "cumulativePoints": 6
+        },
+        {
+            "text": "DESCOMPROMETIMENTO",
             "points": 1,
             "cumulativePoints": 7
         },
         {
-            "text": "Parceria",
+            "text": "PARCERIA",
             "points": 1,
-            "cumulativePoints": 4
+            "cumulativePoints": 8
         }
     ]
 }

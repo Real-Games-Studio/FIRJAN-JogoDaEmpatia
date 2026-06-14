@@ -1,44 +1,44 @@
 {
     "words": [
         {
-            "text": "Adaptação",
+            "text": "ADAPTATION",
             "points": 1,
-            "cumulativePoints": 8
+            "cumulativePoints": 1
         },
         {
-            "text": "Desengajado",
+            "text": "PROBLEM-SOLVING",
             "points": 1,
-            "cumulativePoints": 13
+            "cumulativePoints": 2
         },
         {
-            "text": "Resolução de problema",
+            "text": "COMMITMENT",
             "points": 1,
-            "cumulativePoints": 34
+            "cumulativePoints": 3
         },
         {
-            "text": "Falta de profissionalismo",
-            "points": 1,
-            "cumulativePoints": 21
-        },
-        {
-            "text": "Compromisso",
+            "text": "RESPECT FOR THE CLIENT",
             "points": 1,
             "cumulativePoints": 4
         },
         {
-            "text": "Falta de comunicação",
+            "text": "DISENGAGED",
+            "points": 1,
+            "cumulativePoints": 5
+        },
+        {
+            "text": "LACK OF PROFESSIONALISM",
+            "points": 1,
+            "cumulativePoints": 6
+        },
+        {
+            "text": "LACK OF COMMUNICATION",
             "points": 1,
             "cumulativePoints": 7
         },
         {
-            "text": "Respeito ao cliente",
+            "text": "NEGLIGENT",
             "points": 1,
-            "cumulativePoints": 21
-        },
-        {
-            "text": "Negligente",
-            "points": 1,
-            "cumulativePoints": 13
+            "cumulativePoints": 8
         }
     ]
 }

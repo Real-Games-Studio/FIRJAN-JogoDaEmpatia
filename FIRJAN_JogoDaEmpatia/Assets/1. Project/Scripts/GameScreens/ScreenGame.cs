@@ -10,26 +10,32 @@ using FIRJAN.UI;
 /// Script para gerenciar a lógica principal do Jogo da Empatia.
 /// Controla as 3 rodadas do jogo e calcula a pontuação de empatia.
 ///
-/// COMPORTAMENTO DAS RODADAS (4 FASES):
-/// FASE 1 - Introdução:
-///   - Mostra primeira imagem com descrição da situação
+/// COMPORTAMENTO DAS RODADAS (5 FASES):
+/// FASE 1 - Apenas Imagem:
+///   - Mostra APENAS a primeira imagem (sem texto)
 ///   - Botão "Avançar" para prosseguir
 ///
-/// FASE 2 - Primeira Escolha:
-///   - Mantém primeira imagem e texto de descrição visíveis
+/// FASE 2 - Imagem com Descrição:
+///   - Mantém primeira imagem visível
+///   - Mostra texto da situação (descrição)
+///   - Botão "Avançar" para prosseguir
+///
+/// FASE 3 - Primeira Escolha:
+///   - Mantém primeira imagem visível
+///   - Texto muda para pergunta
 ///   - Mostra botões de palavras para seleção
 ///   - Botão "Confirmar" (habilitado apenas se pelo menos 1 palavra selecionada)
 ///
-/// FASE 3 - Revisão com Contexto Completo:
+/// FASE 4 - Revisão com Contexto Completo:
 ///   - Mostra duas imagens lado a lado
-///   - Mantém texto de descrição visível
+///   - Texto muda para pergunta de revisão
 ///   - Permite re-seleção das palavras
 ///   - Botão "Continuar" (sempre habilitado)
 ///
-/// FASE 4 - Resultados:
+/// FASE 5 - Resultados:
 ///   - Esconde imagens e texto de descrição
 ///   - Mostra botões selecionados + nuvem de palavras + texto explicativo
-///   - Botão "Avançar" para próximo round ou tela final
+///   - Botão "Continuar" para próximo round ou tela final
 ///
 /// SITUAÇÕES DAS RODADAS:
 /// Situação 1: Em uma reunião online importante com um cliente, Marcos não liga a câmera.
@@ -43,7 +49,7 @@ using FIRJAN.UI;
 ///   * imageDisplay1GO/imageDisplay2GO: GameObjects dentro do HorizontalLayoutGroup
 ///   * imageDisplay1/imageDisplay2: Componentes Image dos GameObjects
 ///   * imageDisplay1CanvasGroup/imageDisplay2CanvasGroup: CanvasGroups para fade in/out
-///   * descriptionText: TextMeshProUGUI com AutoSizeOptions (65 para 1 imagem, 35 para 2 imagens)
+///   * descriptionText: TextMeshProUGUI com AutoSizeOptions (35 fixo)
 /// - Efeito de fade controlado por fadeDuration (padrão 1 segundo)
 /// - Layout é automaticamente reconstruído quando imagens são ativadas/desativadas
 /// </summary>
@@ -167,10 +173,11 @@ public class ScreenGame : CanvasScreen
     /// </summary>
     private enum GamePhase
     {
-        Phase1_Introduction,    // Fase 1: Imagem + texto + botão "Avançar"
-        Phase2_FirstChoice,     // Fase 2: Primeira imagem + botões de escolha + botão "Confirmar"
-        Phase3_ReviewChoice,    // Fase 3: Duas imagens + botões (re-seleção) + botão "Continuar"
-        Phase4_Results          // Fase 4: Resultados (nuvem de palavras + texto explicativo)
+        Phase1_ImageOnly,              // Fase 1: Apenas imagem 1 (sem texto)
+        Phase2_ImageWithDescription,   // Fase 2: Imagem 1 + texto da situação
+        Phase3_FirstChoice,            // Fase 3: Imagem 1 + texto da pergunta + botões de escolha
+        Phase4_ReviewWithBothImages,   // Fase 4: Duas imagens + texto atualizado + re-seleção
+        Phase5_Results                 // Fase 5: Resultados (nuvem de palavras + texto explicativo)
     }
 
     private int currentRoundIndex = 0;
@@ -178,7 +185,7 @@ public class ScreenGame : CanvasScreen
     private List<Button> currentWordButtons = new List<Button>();
     private List<bool> selectedWords = new List<bool>();
     private List<string> currentRoundSelectedWords = new List<string>(); // Palavras selecionadas na rodada atual
-    private GamePhase currentPhase = GamePhase.Phase1_Introduction;
+    private GamePhase currentPhase = GamePhase.Phase1_ImageOnly;
     private List<WordData> currentRoundWordData = new List<WordData>(); // Dados da rodada atual
 
     #endregion
@@ -257,9 +264,10 @@ public class ScreenGame : CanvasScreen
         Debug.Log($"[Problema2][OnLanguageChanged] New language: {(LanguageManager.Instance != null ? LanguageManager.Instance.CurrentLanguage.ToString() : "NULL")}");
 
         // Só atualiza se estiver em uma fase que mostra imagens
-        if (currentPhase == GamePhase.Phase1_Introduction ||
-            currentPhase == GamePhase.Phase2_FirstChoice ||
-            currentPhase == GamePhase.Phase3_ReviewChoice)
+        if (currentPhase == GamePhase.Phase1_ImageOnly ||
+            currentPhase == GamePhase.Phase2_ImageWithDescription ||
+            currentPhase == GamePhase.Phase3_FirstChoice ||
+            currentPhase == GamePhase.Phase4_ReviewWithBothImages)
         {
             Debug.Log("[Problema2][OnLanguageChanged] Phase matches, calling RefreshCurrentRoundImages");
             RefreshCurrentRoundImages();
@@ -267,6 +275,13 @@ public class ScreenGame : CanvasScreen
         else
         {
             Debug.Log($"[Problema2][OnLanguageChanged] Phase does NOT match (current: {currentPhase}), skipping image refresh");
+        }
+
+        // CORREÇÃO: Se estiver na fase de resultados (nuvem de palavras), recarrega os dados traduzidos
+        if (currentPhase == GamePhase.Phase5_Results && currentRoundWordData.Count > 0)
+        {
+            Debug.Log("[OnLanguageChanged] Recarregando nuvem de palavras com novos textos traduzidos");
+            ReloadWordCloudWithTranslation();
         }
     }
 
@@ -315,9 +330,26 @@ public class ScreenGame : CanvasScreen
     /// </summary>
     private IEnumerator ResetGameDelayed()
     {
-        // Aguarda até que WordCloudDisplay.Instance esteja disponível
-        int maxAttempts = 10;
+        // IMPORTANTE: Aguarda o LanguageManager estar disponível PRIMEIRO
+        int maxAttempts = 100;
         int attempts = 0;
+        while (LanguageManager.Instance == null && attempts < maxAttempts)
+        {
+            yield return null; // Aguarda um frame
+            attempts++;
+        }
+
+        if (LanguageManager.Instance == null)
+        {
+            Debug.LogError("[ScreenGame] LanguageManager.Instance ainda é nulo após aguardar! Verifique se o GameObject com LanguageManager está na cena.");
+        }
+        else
+        {
+            Debug.Log("[ScreenGame] LanguageManager.Instance encontrado!");
+        }
+
+        // Aguarda até que WordCloudDisplay.Instance esteja disponível
+        attempts = 0;
         while (WordCloudDisplay.Instance == null && attempts < maxAttempts)
         {
             yield return null; // Aguarda um frame
@@ -365,7 +397,7 @@ public class ScreenGame : CanvasScreen
 
         currentRoundIndex = 0;
         totalEmpatheticScore = 0;
-        currentPhase = GamePhase.Phase1_Introduction;
+        currentPhase = GamePhase.Phase1_ImageOnly;
 
         // Limpa a UI
         ClearWordButtons();
@@ -441,7 +473,7 @@ public class ScreenGame : CanvasScreen
         }
 
         RoundData currentRound = gameRounds[roundIndex];
-        currentPhase = GamePhase.Phase1_Introduction;
+        currentPhase = GamePhase.Phase1_ImageOnly;
 
         // Limpa botões selecionados do round anterior (se houver)
         ClearSelectedWordsButtons();
@@ -476,15 +508,15 @@ public class ScreenGame : CanvasScreen
             Debug.Log($"[ScreenGame] Header resetado para: Situação {roundNumber}");
         }
 
-        // Inicia a Fase 1: Introdução
-        StartCoroutine(Phase1_ShowIntroduction(roundIndex, currentRound));
+        // Inicia a Fase 1: Apenas Imagem
+        StartCoroutine(Phase1_ShowImageOnly(roundIndex, currentRound));
     }
 
     /// <summary>
-    /// FASE 1: Mostra primeira imagem + texto de introdução + botão "Avançar".
+    /// FASE 1: Mostra APENAS a primeira imagem (sem texto) + botão "Avançar".
     /// O usuário deve clicar em "Avançar" para ir para a Fase 2.
     /// </summary>
-    private IEnumerator Phase1_ShowIntroduction(int roundIndex, RoundData roundData)
+    private IEnumerator Phase1_ShowImageOnly(int roundIndex, RoundData roundData)
     {
         // Aguarda até que a tela esteja ativa
         while (!IsOn())
@@ -519,12 +551,6 @@ public class ScreenGame : CanvasScreen
             imageDisplay1.sprite = image1;
         }
 
-        // Font size é sempre 35 (removido ajuste dinâmico)
-        if (descriptionText != null)
-        {
-            descriptionText.fontSizeMax = 35f;
-        }
-
         // Atualiza o header com o número da situação
         if (headerText != null)
         {
@@ -533,16 +559,14 @@ public class ScreenGame : CanvasScreen
             localizedTextHeader.SetFormatVariables(roundNumber.ToString());
         }
 
-        // Atualiza a descrição da situação
-        UpdateSituationDescription(roundIndex);
-
-        // Fade in da primeira imagem E do texto de descrição simultaneamente
-        if (imageDisplay1CanvasGroup != null && descriptionCanvasGroup != null)
+        // IMPORTANTE: ESCONDE o texto de descrição (Fase 1 = apenas imagem)
+        if (descriptionCanvasGroup != null)
         {
-            StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 0f, 1f, fadeDuration));
-            yield return StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
+            descriptionCanvasGroup.alpha = 0f;
         }
-        else if (imageDisplay1CanvasGroup != null)
+
+        // Fade in APENAS da primeira imagem (texto permanece invisível)
+        if (imageDisplay1CanvasGroup != null)
         {
             yield return StartCoroutine(FadeCanvasGroup(imageDisplay1CanvasGroup, 0f, 1f, fadeDuration));
         }
@@ -552,31 +576,58 @@ public class ScreenGame : CanvasScreen
         {
             confirmButton.gameObject.SetActive(true);
             confirmButton.interactable = true;
-            // TODO: Criar key para "Avançar" - por enquanto usa "botao2" (Continuar)
-            UpdateConfirmButtonLabel(false); // false = "Continuar" (temporário, deveria ser "Avançar")
-            Debug.Log("[Phase1] Botão 'Avançar' ativado");
+            UpdateConfirmButtonLabel(false); // false = "Continuar" (usado como "Avançar")
+            Debug.Log("[Phase1] Botão 'Avançar' ativado - apenas imagem visível");
         }
     }
 
     /// <summary>
-    /// FASE 2: Troca o texto de descrição para a pergunta da Fase 2, mantém primeira imagem, mostra botões de escolha.
+    /// FASE 2: Mostra imagem 1 + texto da situação (descrição) + botão "Avançar".
+    /// O usuário deve clicar em "Avançar" para ir para a Fase 3.
+    /// </summary>
+    private IEnumerator Phase2_ShowImageWithDescription(int roundIndex, RoundData roundData)
+    {
+        currentPhase = GamePhase.Phase2_ImageWithDescription;
+        Debug.Log("[Phase2] Iniciando fase de imagem com descrição");
+
+        // Atualiza a descrição para o texto da situação
+        UpdateSituationDescription(roundIndex);
+
+        // Fade in do texto de descrição
+        if (descriptionCanvasGroup != null)
+        {
+            yield return StartCoroutine(FadeCanvasGroup(descriptionCanvasGroup, 0f, 1f, fadeDuration));
+        }
+
+        // Mostra o botão "Avançar" (sempre habilitado)
+        if (confirmButton != null)
+        {
+            confirmButton.gameObject.SetActive(true);
+            confirmButton.interactable = true;
+            UpdateConfirmButtonLabel(false); // false = "Continuar" (usado como "Avançar")
+            Debug.Log("[Phase2] Botão 'Avançar' ativado");
+        }
+    }
+
+    /// <summary>
+    /// FASE 3: Troca o texto para a pergunta, mantém primeira imagem, mostra botões de escolha.
     /// Botão "Confirmar" aparece mas só habilita quando pelo menos 1 palavra for selecionada.
     /// </summary>
-    private IEnumerator Phase2_ShowFirstChoice(int roundIndex, RoundData roundData)
+    private IEnumerator Phase3_ShowFirstChoice(int roundIndex, RoundData roundData)
     {
-        currentPhase = GamePhase.Phase2_FirstChoice;
-        Debug.Log("[Phase2] Iniciando fase de primeira escolha");
+        currentPhase = GamePhase.Phase3_FirstChoice;
+        Debug.Log("[Phase3] Iniciando fase de primeira escolha");
 
-        // Atualiza a descrição para a pergunta da Fase 2
+        // Atualiza a descrição para a pergunta da Fase 3
         if (descriptionLocalizedText != null)
         {
-            Debug.Log("[Phase2] BEFORE SetLocalizationKey - current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
+            Debug.Log("[Phase3] BEFORE SetLocalizationKey - current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
             descriptionLocalizedText.SetLocalizationKey("common", "phase2Description");
-            Debug.Log("[Phase2] AFTER SetLocalizationKey - new text should be: " + (descriptionText != null ? descriptionText.text : "NULL"));
+            Debug.Log("[Phase3] AFTER SetLocalizationKey - new text should be: " + (descriptionText != null ? descriptionText.text : "NULL"));
         }
         else
         {
-            Debug.LogError("[Phase2] descriptionLocalizedText is NULL!");
+            Debug.LogError("[Phase3] descriptionLocalizedText is NULL!");
         }
 
         // Mantém a primeira imagem visível
@@ -605,31 +656,31 @@ public class ScreenGame : CanvasScreen
             confirmButton.gameObject.SetActive(true);
             confirmButton.interactable = false;
             UpdateConfirmButtonLabel(true); // true = "Confirmar"
-            Debug.Log("[Phase2] Botão 'Confirmar' ativado (mas desabilitado até seleção)");
+            Debug.Log("[Phase3] Botão 'Confirmar' ativado (mas desabilitado até seleção)");
         }
     }
 
     /// <summary>
-    /// FASE 3: Ativa segunda imagem, mostra duas imagens lado a lado, troca texto para pergunta da Fase 3 e permite re-seleção.
+    /// FASE 4: Ativa segunda imagem, mostra duas imagens lado a lado, troca texto para pergunta de revisão e permite re-seleção.
     /// Botão "Continuar" sempre habilitado (pois já houve confirmação anterior).
     /// </summary>
-    private IEnumerator Phase3_ShowReviewChoice(int roundIndex, RoundData roundData)
+    private IEnumerator Phase4_ShowReviewWithBothImages(int roundIndex, RoundData roundData)
     {
-        currentPhase = GamePhase.Phase3_ReviewChoice;
-        Debug.Log("[Phase3] Iniciando fase de revisão de escolha");
+        currentPhase = GamePhase.Phase4_ReviewWithBothImages;
+        Debug.Log("[Phase4] Iniciando fase de revisão com duas imagens");
 
         Sprite image2 = GetImage2ForRound(roundIndex);
 
-        // Atualiza a descrição para a pergunta da Fase 3
+        // Atualiza a descrição para a pergunta de revisão da Fase 4
         if (descriptionLocalizedText != null)
         {
-            Debug.Log("[Phase3] BEFORE SetLocalizationKey - current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
+            Debug.Log("[Phase4] BEFORE SetLocalizationKey - current text: " + (descriptionText != null ? descriptionText.text : "NULL"));
             descriptionLocalizedText.SetLocalizationKey("common", "phase3Description");
-            Debug.Log("[Phase3] AFTER SetLocalizationKey - new text should be: " + (descriptionText != null ? descriptionText.text : "NULL"));
+            Debug.Log("[Phase4] AFTER SetLocalizationKey - new text should be: " + (descriptionText != null ? descriptionText.text : "NULL"));
         }
         else
         {
-            Debug.LogError("[Phase3] descriptionLocalizedText is NULL!");
+            Debug.LogError("[Phase4] descriptionLocalizedText is NULL!");
         }
 
         // Ativa a segunda imagem (primeira já está ativa desde a Fase 1)
@@ -664,7 +715,7 @@ public class ScreenGame : CanvasScreen
         {
             confirmButton.interactable = true;
             UpdateConfirmButtonLabel(false); // false = "Continuar"
-            Debug.Log("[Phase3] Botão 'Continuar' ativado");
+            Debug.Log("[Phase4] Botão 'Continuar' ativado");
         }
     }
 
@@ -828,9 +879,10 @@ public class ScreenGame : CanvasScreen
     /// <summary>
     /// Atualiza o estado do botão de confirmar baseado nas seleções e na fase atual.
     /// Fase 1: Sempre habilitado (botão "Avançar")
-    /// Fase 2: Só habilita se pelo menos 1 palavra foi selecionada (botão "Confirmar")
-    /// Fase 3: Sempre habilitado (botão "Continuar", permite re-seleção)
-    /// Fase 4: Sempre habilitado (botão "Avançar" para próximo round)
+    /// Fase 2: Sempre habilitado (botão "Avançar")
+    /// Fase 3: Só habilita se pelo menos 1 palavra foi selecionada (botão "Confirmar")
+    /// Fase 4: Sempre habilitado (botão "Continuar", permite re-seleção)
+    /// Fase 5: Sempre habilitado (botão "Continuar" para próximo round)
     /// </summary>
     private void UpdateConfirmButtonState()
     {
@@ -839,21 +891,25 @@ public class ScreenGame : CanvasScreen
 
         switch (currentPhase)
         {
-            case GamePhase.Phase1_Introduction:
+            case GamePhase.Phase1_ImageOnly:
                 confirmButton.interactable = true; // Sempre habilitado
                 break;
 
-            case GamePhase.Phase2_FirstChoice:
-                bool hasSelection = HasAnyWordSelected();
-                confirmButton.interactable = hasSelection;
-                Debug.Log($"[UpdateConfirmButtonState Phase2] Botão {(hasSelection ? "habilitado" : "desabilitado")}");
+            case GamePhase.Phase2_ImageWithDescription:
+                confirmButton.interactable = true; // Sempre habilitado
                 break;
 
-            case GamePhase.Phase3_ReviewChoice:
+            case GamePhase.Phase3_FirstChoice:
+                bool hasSelection = HasAnyWordSelected();
+                confirmButton.interactable = hasSelection;
+                Debug.Log($"[UpdateConfirmButtonState Phase3] Botão {(hasSelection ? "habilitado" : "desabilitado")}");
+                break;
+
+            case GamePhase.Phase4_ReviewWithBothImages:
                 confirmButton.interactable = true; // Sempre habilitado (já teve confirmação)
                 break;
 
-            case GamePhase.Phase4_Results:
+            case GamePhase.Phase5_Results:
                 confirmButton.interactable = true; // Sempre habilitado
                 break;
         }
@@ -891,11 +947,12 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
-    /// Método público chamado pelo botão principal. Controla as 4 fases do jogo.
-    /// Fase 1: Botão "Avançar" -> vai para Fase 2
-    /// Fase 2: Botão "Confirmar" -> vai para Fase 3 (requer pelo menos 1 palavra selecionada)
-    /// Fase 3: Botão "Continuar" -> processa escolhas e vai para Fase 4
-    /// Fase 4: Botão "Avançar" -> vai para próximo round ou tela de resultados
+    /// Método público chamado pelo botão principal. Controla as 5 fases do jogo.
+    /// Fase 1: Botão "Avançar" -> vai para Fase 2 (mostrar texto)
+    /// Fase 2: Botão "Avançar" -> vai para Fase 3 (mostrar pergunta + botões)
+    /// Fase 3: Botão "Confirmar" -> vai para Fase 4 (requer pelo menos 1 palavra selecionada)
+    /// Fase 4: Botão "Continuar" -> processa escolhas e vai para Fase 5
+    /// Fase 5: Botão "Continuar" -> vai para próximo round ou tela de resultados
     /// </summary>
     public void OnConfirmButtonPressed()
     {
@@ -903,30 +960,35 @@ public class ScreenGame : CanvasScreen
 
         switch (currentPhase)
         {
-            case GamePhase.Phase1_Introduction:
-                // Fase 1: Avançar para mostrar os botões de escolha
-                StartCoroutine(Phase2_ShowFirstChoice(currentRoundIndex, gameRounds[currentRoundIndex]));
+            case GamePhase.Phase1_ImageOnly:
+                // Fase 1: Avançar para mostrar texto da situação
+                StartCoroutine(Phase2_ShowImageWithDescription(currentRoundIndex, gameRounds[currentRoundIndex]));
                 break;
 
-            case GamePhase.Phase2_FirstChoice:
-                // Fase 2: Confirmar escolha e mostrar segunda imagem
+            case GamePhase.Phase2_ImageWithDescription:
+                // Fase 2: Avançar para mostrar pergunta + botões de escolha
+                StartCoroutine(Phase3_ShowFirstChoice(currentRoundIndex, gameRounds[currentRoundIndex]));
+                break;
+
+            case GamePhase.Phase3_FirstChoice:
+                // Fase 3: Confirmar escolha e mostrar segunda imagem
                 if (HasAnyWordSelected())
                 {
-                    StartCoroutine(Phase3_ShowReviewChoice(currentRoundIndex, gameRounds[currentRoundIndex]));
+                    StartCoroutine(Phase4_ShowReviewWithBothImages(currentRoundIndex, gameRounds[currentRoundIndex]));
                 }
                 else
                 {
-                    Debug.LogWarning("[Phase2] Nenhuma palavra selecionada!");
+                    Debug.LogWarning("[Phase3] Nenhuma palavra selecionada!");
                 }
                 break;
 
-            case GamePhase.Phase3_ReviewChoice:
-                // Fase 3: Continuar para processar escolhas e mostrar resultados
+            case GamePhase.Phase4_ReviewWithBothImages:
+                // Fase 4: Continuar para processar escolhas e mostrar resultados
                 ProcessChoicesAndShowResults();
                 break;
 
-            case GamePhase.Phase4_Results:
-                // Fase 4: Avançar para próximo round ou tela final
+            case GamePhase.Phase5_Results:
+                // Fase 5: Continuar para próximo round ou tela final
                 HandleResultsContinue();
                 break;
         }
@@ -950,6 +1012,20 @@ public class ScreenGame : CanvasScreen
 
         Debug.Log($"Palavras selecionadas: {selectedWords.Count}, Palavras da rodada: {currentRound.words.Count}");
 
+        // CORREÇÃO: Re-traduz currentRoundWordData para o idioma atual ANTES de processar seleções
+        Debug.Log($"[ProcessChoicesAndShowResults] ANTES de processar seleções - Re-traduzindo currentRoundWordData para idioma atual: {(LanguageManager.Instance != null ? LanguageManager.Instance.CurrentLanguage.ToString() : "NULL")}");
+        for (int i = 0; i < currentRoundWordData.Count; i++)
+        {
+            string oldText = currentRoundWordData[i].text;
+            string newText = GetTranslatedWordText(i, currentRoundIndex);
+            
+            if (oldText != newText)
+            {
+                Debug.Log($"[ProcessChoicesAndShowResults] STEP 1 - Re-traduzindo palavra {i}: '{oldText}' → '{newText}'");
+                currentRoundWordData[i].text = newText;
+            }
+        }
+
         // Limpa a lista de palavras selecionadas da rodada anterior
         currentRoundSelectedWords.Clear();
 
@@ -958,7 +1034,10 @@ public class ScreenGame : CanvasScreen
         {
             if (selectedWords[i])
             {
-                string selectedWordText = currentRound.words[i].wordText;
+                // CORREÇÃO: Pega o texto traduzido atual do botão, não o wordText do Inspector
+                string selectedWordText = GetTranslatedWordText(i, currentRoundIndex);
+
+                Debug.Log($"[DEBUG] Palavra selecionada - Índice: {i}, WordText do Inspector: '{currentRound.words[i].wordText}', Texto traduzido: '{selectedWordText}'");
 
                 // Adiciona à lista de palavras selecionadas da rodada
                 currentRoundSelectedWords.Add(selectedWordText);
@@ -967,15 +1046,21 @@ public class ScreenGame : CanvasScreen
                 // Porque currentRoundWordData pode estar em ordem diferente dos botões
                 WordData wordData = currentRoundWordData.Find(w => w.text == selectedWordText);
 
+                Debug.Log($"[DEBUG] Procurando em currentRoundWordData ({currentRoundWordData.Count} palavras):");
+                foreach (var wd in currentRoundWordData)
+                {
+                    Debug.Log($"  - '{wd.text}' (cumulativePoints: {wd.cumulativePoints})");
+                }
+
                 if (wordData != null)
                 {
                     // Incrementa a pontuação cumulativa da palavra
                     wordData.cumulativePoints += 1;
-                    Debug.Log($"Palavra '{selectedWordText}' incrementada para {wordData.cumulativePoints} pontos cumulativos");
+                    Debug.Log($"[SUCCESS] Palavra '{selectedWordText}' incrementada para {wordData.cumulativePoints} pontos cumulativos");
                 }
                 else
                 {
-                    Debug.LogError($"[ScreenGame] Palavra '{selectedWordText}' não encontrada em currentRoundWordData!");
+                    Debug.LogError($"[ERRO] Palavra '{selectedWordText}' não encontrada em currentRoundWordData!");
                 }
 
                 // Verifica se é empática para pontuação
@@ -990,10 +1075,12 @@ public class ScreenGame : CanvasScreen
         // Salva os dados atualizados
         SaveRoundWordData(currentRoundIndex);
 
-        // Atualiza a nuvem de palavras com os novos dados
+        // Atualiza a nuvem de palavras com os novos dados (já traduzidos no início do método)
         if (WordCloudDisplay.Instance != null)
         {
-            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData);
+            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData, currentRoundIndex);
+            WordCloudDisplay.Instance.ForceUpdateDisplay();
+            Debug.Log("[ProcessChoicesAndShowResults] Nuvem atualizada com textos traduzidos");
         }
 
         // Adiciona ao score total
@@ -1075,7 +1162,19 @@ public class ScreenGame : CanvasScreen
         // Determina qual section usar baseado na rodada atual
         string section = $"situation{currentRoundIndex + 1}";
 
-        Debug.Log($"[ScreenGame] Instanciando {currentRoundSelectedWords.Count} palavras selecionadas no container de resultados");
+        Debug.Log($"[ScreenGame] ===== INSTANCIANDO BOT\u00d5ES SELECIONADOS =====");
+        Debug.Log($"[ScreenGame] Total de palavras selecionadas: {currentRoundSelectedWords.Count}");
+        Debug.Log($"[ScreenGame] Palavras em currentRoundWordData: {currentRoundWordData.Count}");
+        
+        for (int k = 0; k < currentRoundWordData.Count; k++)
+        {
+            Debug.Log($"  currentRoundWordData[{k}]: '{currentRoundWordData[k].text}'");
+        }
+        
+        for (int k = 0; k < currentRoundSelectedWords.Count; k++)
+        {
+            Debug.Log($"  currentRoundSelectedWords[{k}]: '{currentRoundSelectedWords[k]}'");
+        }
 
         // Instancia apenas as palavras selecionadas
         for (int i = 0; i < currentRoundSelectedWords.Count; i++)
@@ -1087,17 +1186,39 @@ public class ScreenGame : CanvasScreen
             // Remove o comportamento de clique (é apenas visual)
             wordButton.interactable = false;
 
+            // CORREÇÃO: Encontra o índice correto procurando pelo texto traduzido em currentRoundWordData
+            int originalIndex = -1;
+            for (int j = 0; j < currentRoundWordData.Count; j++)
+            {
+                if (currentRoundWordData[j].text == selectedWord)
+                {
+                    originalIndex = j;
+                    break;
+                }
+            }
+
+            Debug.Log($"[InstantiateSelectedWordsButtons] Palavra '{selectedWord}' encontrada no índice {originalIndex}");
+
             // Configura o texto do botão
             LocalizedText localizedText = wordButton.GetComponentInChildren<LocalizedText>();
             if (localizedText != null)
             {
-                // Encontra o índice da palavra na lista original para pegar a key correta
-                int originalIndex = gameRounds[currentRoundIndex].words.FindIndex(w => w.wordText == selectedWord);
                 if (originalIndex >= 0)
                 {
                     string key = $"opcao{originalIndex + 1}";
                     localizedText.SetLocalizationKey(section, key);
-                    Debug.Log($"[ScreenGame] Botão criado: {selectedWord} (key: {section}.{key})");
+                    Debug.Log($"[ScreenGame] Botão criado com LocalizedText: '{selectedWord}' (key: {section}.{key})");
+                }
+                else
+                {
+                    Debug.LogWarning($"[ScreenGame] Palavra '{selectedWord}' não encontrada em currentRoundWordData!");
+                    // Fallback: desativa LocalizedText e usa texto direto
+                    localizedText.enabled = false;
+                    TextMeshProUGUI buttonText = wordButton.GetComponentInChildren<TextMeshProUGUI>();
+                    if (buttonText != null)
+                    {
+                        buttonText.text = selectedWord;
+                    }
                 }
             }
             else
@@ -1107,6 +1228,7 @@ public class ScreenGame : CanvasScreen
                 if (buttonText != null)
                 {
                     buttonText.text = selectedWord;
+                    Debug.Log($"[ScreenGame] Botão criado com texto direto: '{selectedWord}'");
                 }
             }
         }
@@ -1216,6 +1338,132 @@ public class ScreenGame : CanvasScreen
     }
 
     /// <summary>
+    /// Recarrega a nuvem de palavras com os textos traduzidos atualizados.
+    /// Chamado quando o idioma muda durante a exibição da nuvem.
+    /// </summary>
+    private void ReloadWordCloudWithTranslation()
+    {
+        if (currentRoundIndex < 0 || currentRoundIndex >= gameRounds.Count)
+        {
+            Debug.LogWarning("[ReloadWordCloudWithTranslation] currentRoundIndex inválido");
+            return;
+        }
+
+        // Re-traduz todas as palavras com o novo idioma
+        for (int i = 0; i < currentRoundWordData.Count; i++)
+        {
+            string oldText = currentRoundWordData[i].text;
+            string newText = GetTranslatedWordText(i, currentRoundIndex);
+            
+            if (oldText != newText)
+            {
+                Debug.Log($"[ReloadWordCloudWithTranslation] Palavra {i}: '{oldText}' → '{newText}'");
+                currentRoundWordData[i].text = newText;
+            }
+        }
+
+        // Recarrega a nuvem com os textos atualizados
+        if (WordCloudDisplay.Instance != null)
+        {
+            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData, currentRoundIndex);
+            WordCloudDisplay.Instance.ForceUpdateDisplay();
+            Debug.Log("[ReloadWordCloudWithTranslation] Nuvem de palavras atualizada com novos textos");
+        }
+
+        // CORREÇÃO: Também atualiza os botões de palavras selecionadas
+        UpdateSelectedWordsButtonsText();
+    }
+
+    /// <summary>
+    /// Atualiza o texto dos botões de palavras selecionadas quando o idioma muda.
+    /// </summary>
+    private void UpdateSelectedWordsButtonsText()
+    {
+        if (selectedWordsContainer == null) return;
+
+        Debug.Log("[UpdateSelectedWordsButtonsText] Atualizando textos dos botões selecionados");
+
+        // Determina qual section usar baseado na rodada atual
+        string section = $"situation{currentRoundIndex + 1}";
+
+        // Para cada botão no container
+        int buttonIndex = 0;
+        foreach (Transform child in selectedWordsContainer)
+        {
+            LocalizedText localizedText = child.GetComponentInChildren<LocalizedText>();
+            if (localizedText != null)
+            {
+                // Força atualização do LocalizedText
+                localizedText.UpdateText();
+                Debug.Log($"[UpdateSelectedWordsButtonsText] Botão {buttonIndex} atualizado via LocalizedText");
+            }
+            else
+            {
+                // Fallback: atualiza manualmente se não tiver LocalizedText
+                TextMeshProUGUI buttonText = child.GetComponentInChildren<TextMeshProUGUI>();
+                if (buttonText != null && buttonIndex < currentRoundSelectedWords.Count)
+                {
+                    // Precisa encontrar o índice original da palavra para pegar a key correta
+                    string selectedWord = currentRoundSelectedWords[buttonIndex];
+                    
+                    // Busca qual era o índice original dessa palavra
+                    for (int i = 0; i < currentRoundWordData.Count; i++)
+                    {
+                        if (currentRoundWordData[i].text == selectedWord)
+                        {
+                            string newText = GetTranslatedWordText(i, currentRoundIndex);
+                            buttonText.text = newText;
+                            Debug.Log($"[UpdateSelectedWordsButtonsText] Botão {buttonIndex}: '{selectedWord}' → '{newText}'");
+                            break;
+                        }
+                    }
+                }
+            }
+            buttonIndex++;
+        }
+    }
+
+    /// <summary>
+    /// Obtém o texto traduzido de uma palavra baseado no índice e rodada.
+    /// </summary>
+    /// <param name="wordIndex">Índice da palavra (0-7)</param>
+    /// <param name="roundIndex">Índice da rodada (0-2)</param>
+    /// <returns>Texto traduzido atual da palavra</returns>
+    private string GetTranslatedWordText(int wordIndex, int roundIndex)
+    {
+        if (LanguageManager.Instance == null)
+        {
+            // FALLBACK: Se LanguageManager não estiver pronto, usa o wordText do Inspector
+            Debug.LogWarning($"[ScreenGame] LanguageManager.Instance é nulo! Usando fallback do Inspector para palavra {wordIndex} da rodada {roundIndex}");
+            
+            if (roundIndex >= 0 && roundIndex < gameRounds.Count)
+            {
+                if (wordIndex >= 0 && wordIndex < gameRounds[roundIndex].words.Count)
+                {
+                    string fallbackText = gameRounds[roundIndex].words[wordIndex].wordText;
+                    Debug.LogWarning($"[ScreenGame] Fallback text: '{fallbackText}'");
+                    return fallbackText;
+                }
+            }
+            
+            Debug.LogError($"[ScreenGame] Não foi possível obter texto - índices inválidos!");
+            return $"Palavra{wordIndex + 1}"; // Último fallback
+        }
+
+        string section = $"situation{roundIndex + 1}";
+        string key = $"opcao{wordIndex + 1}";
+
+        string translatedText = LanguageManager.Instance.GetLocalizedText(section, key);
+        
+        if (string.IsNullOrEmpty(translatedText))
+        {
+            Debug.LogWarning($"[ScreenGame] Texto traduzido vazio para section='{section}', key='{key}'");
+        }
+
+        return translatedText;
+    }
+
+    /// <summary>
     /// Finaliza o jogo e vai para a tela de resultado.
     /// </summary>
     private void FinishGame()
@@ -1245,22 +1493,24 @@ public class ScreenGame : CanvasScreen
         if (WordScorePersistence.Instance == null)
         {
             Debug.LogWarning("[ScreenGame] WordScorePersistence.Instance é nulo. Criando dados padrão.");
-            currentRoundWordData = CreateDefaultWordData(roundData);
+            currentRoundWordData = CreateDefaultWordData(roundIndex, roundData);
 
             // IMPORTANTE: Mesmo sem persistência, carrega os dados na nuvem
             if (WordCloudDisplay.Instance != null)
             {
-                WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData);
+                WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData, roundIndex);
                 Debug.Log($"[ScreenGame] Dados padrão carregados na nuvem: {currentRoundWordData.Count} palavras");
             }
             return;
         }
 
-        // Cria lista com os textos das palavras
+        // CORREÇÃO: Cria lista com os textos TRADUZIDOS das palavras, não o wordText do Inspector
         List<string> wordTexts = new List<string>();
-        foreach (var word in roundData.words)
+        for (int i = 0; i < roundData.words.Count; i++)
         {
-            wordTexts.Add(word.wordText);
+            string translatedText = GetTranslatedWordText(i, roundIndex);
+            wordTexts.Add(translatedText);
+            Debug.Log($"[LoadRoundWordData] Round {roundIndex + 1}, Palavra {i + 1}: '{translatedText}'");
         }
 
         // Carrega dados salvos ou cria dados padrão
@@ -1272,8 +1522,11 @@ public class ScreenGame : CanvasScreen
         // Carrega os dados na nuvem de palavras
         if (WordCloudDisplay.Instance != null)
         {
-            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData);
+            WordCloudDisplay.Instance.LoadRoundData(currentRoundWordData, roundIndex);
             Debug.Log($"[ScreenGame] Dados da rodada {roundIndex + 1} carregados na nuvem: {currentRoundWordData.Count} palavras");
+            
+            // IMPORTANTE: Força atualização imediata para garantir que a nuvem está no idioma correto
+            WordCloudDisplay.Instance.ForceUpdateDisplay();
         }
         else
         {
@@ -1284,15 +1537,19 @@ public class ScreenGame : CanvasScreen
     /// <summary>
     /// Cria dados padrão para uma rodada.
     /// </summary>
+    /// <param name="roundIndex">Índice da rodada (0-2)</param>
     /// <param name="roundData">Dados da rodada</param>
     /// <returns>Lista de WordData inicializados</returns>
-    private List<WordData> CreateDefaultWordData(RoundData roundData)
+    private List<WordData> CreateDefaultWordData(int roundIndex, RoundData roundData)
     {
         List<WordData> wordDataList = new List<WordData>();
 
-        foreach (var word in roundData.words)
+        // CORREÇÃO: Usa textos traduzidos, não o wordText do Inspector
+        for (int i = 0; i < roundData.words.Count; i++)
         {
-            wordDataList.Add(new WordData(word.wordText, 1, 1));
+            string translatedText = GetTranslatedWordText(i, roundIndex);
+            wordDataList.Add(new WordData(translatedText, 1, 1));
+            Debug.Log($"[CreateDefaultWordData] Round {roundIndex + 1}, Palavra {i + 1}: '{translatedText}'");
         }
 
         return wordDataList;
@@ -1406,8 +1663,8 @@ public class ScreenGame : CanvasScreen
     /// </summary>
     private void ShowRoundSummary()
     {
-        currentPhase = GamePhase.Phase4_Results;
-        Debug.Log("[Phase4] Mostrando resultados");
+        currentPhase = GamePhase.Phase5_Results;
+        Debug.Log("[Phase5] Mostrando resultados");
 
         // Mantém as imagens visíveis, só esconde os botões de palavra
         // Esconde todos os botões de palavra

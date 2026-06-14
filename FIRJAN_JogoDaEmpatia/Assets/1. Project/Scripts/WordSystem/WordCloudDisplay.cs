@@ -14,6 +14,10 @@ public class WordDisplaySlot
     [Header("Position Info")]
     public string positionName = "";
 
+    [Header("Priority")]
+    [Tooltip("Ordem de prioridade: 1 = recebe a palavra com MAIS pontos, 2 = segunda mais pontuada, etc.")]
+    public int priority = 0;
+
     [Header("Runtime Data")]
     public string currentWord = "";
     public int currentPoints = 0;
@@ -43,6 +47,7 @@ public class WordCloudDisplay : MonoBehaviour
 
     private Dictionary<string, int> wordScores = new Dictionary<string, int>();
     private List<WordData> currentRoundWords = new List<WordData>(); // Dados da rodada atual
+    private int currentRoundIndex = -1; // Armazena o índice da rodada atual para poder re-traduzir
     public static WordCloudDisplay Instance { get; private set; }
 
     void Awake()
@@ -55,6 +60,26 @@ public class WordCloudDisplay : MonoBehaviour
         {
             Destroy(gameObject);
             return;
+        }
+    }
+
+    void OnEnable()
+    {
+        // Inscreve no evento de mudança de idioma
+        if (LanguageManager.Instance != null)
+        {
+            LanguageManager.Instance.OnLanguageChanged -= OnLanguageChanged;
+            LanguageManager.Instance.OnLanguageChanged += OnLanguageChanged;
+            Debug.Log("[WordCloudDisplay] Inscrito no evento OnLanguageChanged");
+        }
+    }
+
+    void OnDisable()
+    {
+        // Desinscreve do evento
+        if (LanguageManager.Instance != null)
+        {
+            LanguageManager.Instance.OnLanguageChanged -= OnLanguageChanged;
         }
     }
 
@@ -127,27 +152,50 @@ public class WordCloudDisplay : MonoBehaviour
             Debug.Log($"  {i + 1}º: '{sortedWords[i].text}' com {sortedWords[i].cumulativePoints} pontos");
         }
 
-        // Atualiza cada slot com a palavra correspondente (agora ORDENADO!)
-        for (int i = 0; i < sortedWords.Count && i < wordSlots.Count; i++)
+        // CORREÇÃO: Ordena os slots por PRIORIDADE (1 = posição principal/maior)
+        var sortedSlots = new List<WordDisplaySlot>(wordSlots);
+        sortedSlots.Sort((a, b) => 
+        {
+            // Se ambos têm priority definido, usa a priority
+            if (a.priority > 0 && b.priority > 0)
+                return a.priority.CompareTo(b.priority);
+            
+            // Se apenas um tem priority, ele vem primeiro
+            if (a.priority > 0) return -1;
+            if (b.priority > 0) return 1;
+            
+            // Se nenhum tem priority, mantém ordem original
+            return 0;
+        });
+
+        Debug.Log($"[WordCloudDisplay] >> Slots ordenados por prioridade:");
+        for (int i = 0; i < sortedSlots.Count; i++)
+        {
+            Debug.Log($"  Slot {i}: '{sortedSlots[i].positionName}' (priority: {sortedSlots[i].priority})");
+        }
+
+        // Atualiza cada slot com a palavra correspondente
+        // A palavra com MAIS pontos vai para o slot com priority 1 (maiorzão)
+        for (int i = 0; i < sortedWords.Count && i < sortedSlots.Count; i++)
         {
             var wordData = sortedWords[i];
-            var slot = wordSlots[i];
+            var slot = sortedSlots[i];
 
-            Debug.Log($"[WordCloudDisplay] >> Atualizando slot {i}: '{wordData.text}' com {wordData.cumulativePoints} pontos");
+            Debug.Log($"[WordCloudDisplay] >> Atualizando '{slot.positionName}' (priority {slot.priority}): '{wordData.text}' com {wordData.cumulativePoints} pontos");
 
             if (slot.textComponent == null)
             {
-                Debug.LogError($"[WordCloudDisplay] >> ERRO: Slot {i} tem textComponent NULL!");
+                Debug.LogError($"[WordCloudDisplay] >> ERRO: Slot '{slot.positionName}' tem textComponent NULL!");
             }
 
             UpdateSlot(slot, wordData.text, wordData.cumulativePoints, sortedWords);
         }
 
         // Limpa slots extras (não deve acontecer se configurado corretamente)
-        for (int i = sortedWords.Count; i < wordSlots.Count; i++)
+        for (int i = sortedWords.Count; i < sortedSlots.Count; i++)
         {
-            Debug.Log($"[WordCloudDisplay] >> Limpando slot extra {i}");
-            ClearSlot(wordSlots[i]);
+            Debug.Log($"[WordCloudDisplay] >> Limpando slot extra '{sortedSlots[i].positionName}'");
+            ClearSlot(sortedSlots[i]);
         }
 
         Debug.Log($"[WordCloudDisplay] >> Display atualizado!");
@@ -197,27 +245,14 @@ public class WordCloudDisplay : MonoBehaviour
         slot.currentWord = wordText;
         slot.currentPoints = points;
 
-        // Tenta usar LocalizedText se disponível
-        LocalizedText localizedText = slot.textComponent.GetComponent<LocalizedText>();
-        if (localizedText != null)
+        // CORREÇÃO: Usa o texto REAL da palavra, não LocalizedText com keys fixas
+        // As palavras já vêm traduzidas do ScreenGame (que usa as keys corretas: opcao1, opcao2, etc.)
+        // A nuvem deve apenas exibir as palavras ordenadas por cumulativePoints
+        slot.textComponent.text = wordText;
+
+        if (showDebugLogs)
         {
-            // Determina qual palavra é baseado no índice do slot
-            int wordIndex = wordSlots.IndexOf(slot);
-            if (wordIndex >= 0 && wordIndex < 8)
-            {
-                string key = $"palavra{wordIndex + 1}";
-                localizedText.SetLocalizationKey("situation_results", key);
-            }
-            else
-            {
-                // Fallback se não encontrar o índice
-                slot.textComponent.text = wordText;
-            }
-        }
-        else
-        {
-            // Fallback se não tiver LocalizedText
-            slot.textComponent.text = wordText;
+            Debug.Log($"[WordCloudDisplay] Slot atualizado com texto DIRETO: '{wordText}' ({points} pontos)");
         }
 
         ApplyWordStyle(slot, points, allWords);
@@ -419,11 +454,28 @@ public class WordCloudDisplay : MonoBehaviour
     #region Public Utility Methods
 
     /// <summary>
+    /// Chamado quando o idioma muda. Re-traduz as palavras da nuvem.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        Debug.Log("[WordCloudDisplay] OnLanguageChanged - Idioma mudou, atualizando display");
+        
+        // Apenas atualiza o display com os dados atuais
+        // As palavras em currentRoundWords já estão com os textos traduzidos antigos,
+        // mas o UpdateWordCloudDisplay vai usar os textos diretamente
+        // Para traduzir corretamente, precisamos que ScreenGame recarregue os dados
+        
+        // Por enquanto, apenas força atualização do display
+        UpdateWordCloudDisplay();
+    }
+
+    /// <summary>
     /// Carrega os dados de uma rodada e inicializa a nuvem de palavras.
     /// IMPORTANTE: Deve ser chamado no início de cada rodada.
     /// </summary>
     /// <param name="roundWords">Lista de WordData da rodada</param>
-    public void LoadRoundData(List<WordData> roundWords)
+    /// <param name="roundIndex">Índice da rodada (0-2) - opcional, usado para re-tradução</param>
+    public void LoadRoundData(List<WordData> roundWords, int roundIndex = -1)
     {
         if (roundWords == null || roundWords.Count == 0)
         {
@@ -432,6 +484,7 @@ public class WordCloudDisplay : MonoBehaviour
         }
 
         currentRoundWords = new List<WordData>(roundWords);
+        currentRoundIndex = roundIndex; // Salva o índice da rodada
 
         // Limpa o sistema antigo de wordScores
         wordScores.Clear();

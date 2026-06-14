@@ -4,10 +4,10 @@
         "situationTitleEN": "Situation {0}",
         "skipButtonPT": "AVANÇAR",
         "skipButtonEN": "SKIP",
-        "phase2DescriptionPT": "O que passa na sua cabeça em relação a essa situação?<br><br>Clique nas palavras para selecionar",
-        "phase2DescriptionEN": "What goes through your mind regarding this situation?<br><br>Click on the words to select",
-        "phase3DescriptionPT": "Agora veja outro ponto de vista sobre a situação.<br><br>Reavalie ou não suas escolhas.",
-        "phase3DescriptionEN": "Now see another point of view about the situation.<br><br>Reevaluate your choices or not."
+        "phase2DescriptionPT": "O que passa na sua cabeça em relação a essa situação?<br><br><color=#FFA800>Clique nas palavras para selecionar</color>",
+        "phase2DescriptionEN": "What goes through your mind regarding this situation?<br><br><color=#FFA800>Click on the words to select</color>",
+        "phase3DescriptionPT": "Agora veja outro ponto de vista sobre a situação.<br><br><color=#FFA800>Reavalie ou não suas escolhas.</color>",
+        "phase3DescriptionEN": "Now see another point of view about the situation.<br><br><color=#FFA800>Reevaluate your choices or not.</color>"
     },
     "cta": {
         "titulo1PT": "Jogo da<br><color=#ffa600>   empatia</color>",
